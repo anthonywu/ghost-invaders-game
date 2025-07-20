@@ -79,7 +79,7 @@ export class ExplosionEffect implements VisualEffect {
   position: Vector2D;
   isComplete: boolean = false;
   private particles: Particle[] = [];
-  private duration: number = 1.0; // seconds
+  duration: number = 1.0; // seconds - made public for customization
   private elapsed: number = 0;
   private baseColor: string;
 

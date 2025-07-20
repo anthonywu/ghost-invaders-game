@@ -1,5 +1,5 @@
 import { Player } from './Player';
-import { Ghost } from './Ghost';
+import { Ghost, GhostType } from './Ghost';
 import { Projectile } from './Projectile';
 import { GameState } from './types';
 import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffect';
@@ -26,6 +26,10 @@ export class Game {
   
   private ghostSpawnTimer: number = 0;
   private ghostSpawnInterval: number = 2000; // 2 seconds
+  private specialGhostTimer: number = 0;
+  private specialGhostInterval: number = 30000; // 30 seconds
+  private rainbowGhostTimer: number = 0;
+  private rainbowGhostInterval: number = 120000; // 2 minutes
   
   private keys: Set<string> = new Set();
   
@@ -311,11 +315,25 @@ export class Game {
       }
     });
     
-    // Spawn ghosts
+    // Spawn regular ghosts
     this.ghostSpawnTimer += deltaTime * 1000;
     if (this.ghostSpawnTimer >= this.ghostSpawnInterval) {
       this.spawnGhost();
       this.ghostSpawnTimer = 0;
+    }
+    
+    // Spawn special white ghost every 30 seconds
+    this.specialGhostTimer += deltaTime * 1000;
+    if (this.specialGhostTimer >= this.specialGhostInterval) {
+      this.spawnGhost('special');
+      this.specialGhostTimer = 0;
+    }
+    
+    // Spawn rainbow ghost every 2 minutes
+    this.rainbowGhostTimer += deltaTime * 1000;
+    if (this.rainbowGhostTimer >= this.rainbowGhostInterval) {
+      this.spawnGhost('rainbow');
+      this.rainbowGhostTimer = 0;
     }
     
     // Check collisions
@@ -425,9 +443,13 @@ export class Game {
     });
   }
 
-  private spawnGhost() {
-    const x = Math.random() * (this.width - 40 * this.scale) + 20 * this.scale;
-    const ghost = new Ghost(x, -40 * this.scale);
+  private spawnGhost(type: GhostType = 'normal') {
+    let baseSize = 40;
+    if (type === 'special') baseSize = 80;
+    if (type === 'rainbow') baseSize = 120;
+    
+    const x = Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
+    const ghost = new Ghost(x, -baseSize * this.scale, type);
     ghost.width *= this.scale;
     ghost.height *= this.scale;
     ghost.baseSpeed *= this.scale;
@@ -441,19 +463,49 @@ export class Game {
       let hit = false;
       this.ghosts = this.ghosts.filter(ghost => {
         if (this.checkProjectileGhostCollision(projectile, ghost)) {
-          // Create explosion effect for destroyed ghost
-          this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
+          const isDestroyed = ghost.takeDamage();
           
-          this.score += 10;
-          this.ghostsDestroyed++;
-          
-          // Check for life recovery every 100 ghosts
-          if (this.ghostsDestroyed % 100 === 0) {
-            this.lives++;
+          if (isDestroyed) {
+            // Create explosion effect for destroyed ghost
+            this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color));
+            
+            // Points based on ghost type
+            let points = 10;
+            if (ghost.type === 'special' && ghost.maxHitPoints === 2) {
+              points = 20; // White ghost from rainbow
+            } else if (ghost.type === 'special') {
+              points = 50; // Original white ghost
+            }
+            
+            this.score += points;
+            this.ghostsDestroyed++;
+            
+            // Check for life recovery every 100 ghosts
+            if (this.ghostsDestroyed % 100 === 0) {
+              this.lives++;
+            }
+            
+            // Area damage for rainbow ghost destruction
+            if (ghost.maxHitPoints === 3) { // Was a rainbow ghost
+              this.handleRainbowGhostExplosion(ghost);
+            }
+          } else {
+            // Ghost survived hit
+            // Create a smaller explosion effect for the hit
+            const smallExplosion = new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color);
+            smallExplosion.duration = 0.3; // Shorter duration
+            this.visualEffects.push(smallExplosion);
+            
+            // Points for hitting but not destroying
+            if (ghost.type === 'rainbow') {
+              this.score += 30; // Rainbow ghost hit
+            } else {
+              this.score += 25; // Special ghost hit
+            }
           }
           
           hit = true;
-          return false;
+          return !isDestroyed; // Keep ghost if not destroyed
         }
         return true;
       });
@@ -582,6 +634,36 @@ export class Game {
       this.ctx.fillText('Refresh to play again', this.width / 2, this.height / 2 + 80 * this.scale);
       this.ctx.textAlign = 'left';
     }
+  }
+
+  private handleRainbowGhostExplosion(rainbowGhost: Ghost) {
+    // Calculate blast radius (smaller than nuke)
+    const blastRadius = 150 * this.scale;
+    
+    // Destroy nearby ghosts
+    this.ghosts = this.ghosts.filter(ghost => {
+      if (ghost === rainbowGhost) return true; // Skip the rainbow ghost itself
+      
+      const distance = Math.sqrt(
+        Math.pow(ghost.position.x - rainbowGhost.position.x, 2) +
+        Math.pow(ghost.position.y - rainbowGhost.position.y, 2)
+      );
+      
+      if (distance <= blastRadius) {
+        // Create explosion effect for each destroyed ghost
+        this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
+        this.score += 10; // Bonus points for chain destruction
+        this.ghostsDestroyed++;
+        
+        // Check for life recovery
+        if (this.ghostsDestroyed % 100 === 0) {
+          this.lives++;
+        }
+        
+        return false;
+      }
+      return true;
+    });
   }
 
   private drawControlsLegend() {
