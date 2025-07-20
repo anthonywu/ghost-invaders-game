@@ -7,8 +7,9 @@ import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffec
 export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private width: number = 800;
-  private height: number = 1200;
+  private width: number;
+  private height: number;
+  private scale: number = 1;
   
   private player: Player;
   private ghosts: Ghost[] = [];
@@ -39,12 +40,40 @@ export class Game {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
     
-    this.player = new Player(this.width / 2, this.height - 60);
+    // Calculate responsive dimensions
+    this.calculateDimensions();
+    
+    this.player = new Player(this.width / 2, this.height - 60 * this.scale);
+    this.player.width *= this.scale;
+    this.player.height *= this.scale;
+    this.player.speed *= this.scale;
     
     this.setupEventListeners();
+  }
+
+  private calculateDimensions() {
+    const maxWidth = window.innerWidth - 40; // 20px padding on each side
+    const maxHeight = window.innerHeight - 40;
+    const targetAspectRatio = 800 / 1200; // Original aspect ratio
+    
+    // Calculate dimensions maintaining aspect ratio
+    if (maxWidth / maxHeight > targetAspectRatio) {
+      // Height-constrained
+      this.height = maxHeight;
+      this.width = maxHeight * targetAspectRatio;
+    } else {
+      // Width-constrained
+      this.width = maxWidth;
+      this.height = maxWidth / targetAspectRatio;
+    }
+    
+    // Calculate scale factor for game objects
+    this.scale = Math.min(this.width / 800, this.height / 1200);
+    
+    // Set canvas dimensions
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
   }
 
   private setupEventListeners() {
@@ -60,6 +89,36 @@ export class Game {
     
     window.addEventListener('keyup', (e) => {
       this.keys.delete(e.key);
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      this.handleResize();
+    });
+  }
+
+  private handleResize() {
+    const oldWidth = this.width;
+    const oldHeight = this.height;
+    
+    this.calculateDimensions();
+    
+    // Adjust player position proportionally
+    if (this.player) {
+      this.player.position.x = (this.player.position.x / oldWidth) * this.width;
+      this.player.position.y = this.height - 60 * this.scale;
+    }
+    
+    // Adjust ghost positions proportionally
+    this.ghosts.forEach(ghost => {
+      ghost.position.x = (ghost.position.x / oldWidth) * this.width;
+      ghost.position.y = (ghost.position.y / oldHeight) * this.height;
+    });
+    
+    // Adjust projectile positions proportionally
+    this.projectiles.forEach(projectile => {
+      projectile.position.x = (projectile.position.x / oldWidth) * this.width;
+      projectile.position.y = (projectile.position.y / oldHeight) * this.height;
     });
   }
 
@@ -207,6 +266,9 @@ export class Game {
       this.player.position.x,
       this.player.position.y
     );
+    projectile.width *= this.scale;
+    projectile.height *= this.scale;
+    projectile.speed *= this.scale;
     this.projectiles.push(projectile);
   }
 
@@ -242,8 +304,11 @@ export class Game {
   }
 
   private spawnGhost() {
-    const x = Math.random() * (this.width - 40) + 20;
-    const ghost = new Ghost(x, -40);
+    const x = Math.random() * (this.width - 40 * this.scale) + 20 * this.scale;
+    const ghost = new Ghost(x, -40 * this.scale);
+    ghost.width *= this.scale;
+    ghost.height *= this.scale;
+    ghost.speed *= this.scale;
     this.ghosts.push(ghost);
   }
 
@@ -316,35 +381,39 @@ export class Game {
   }
 
   private drawUI() {
+    const baseFontSize = Math.round(24 * this.scale);
+    const smallFontSize = Math.round(18 * this.scale);
+    const padding = Math.round(20 * this.scale);
+    
     this.ctx.fillStyle = 'white';
-    this.ctx.font = '24px Arial';
-    this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+    this.ctx.font = `${baseFontSize}px Arial`;
+    this.ctx.fillText(`Score: ${this.score}`, padding, padding * 2);
     
     // Lives indicator
-    this.ctx.fillText(`Lives: ${this.lives}`, 20, 70);
+    this.ctx.fillText(`Lives: ${this.lives}`, padding, padding * 3.5);
     
     // Ghosts destroyed counter and progress to next life
     const ghostsToNextLife = 100 - (this.ghostsDestroyed % 100);
     this.ctx.fillStyle = '#88FF88';
-    this.ctx.font = '18px Arial';
-    this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, 20, 100);
+    this.ctx.font = `${smallFontSize}px Arial`;
+    this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, padding, padding * 5);
     
     // Reset font for other UI elements
     this.ctx.fillStyle = 'white';
-    this.ctx.font = '24px Arial';
+    this.ctx.font = `${baseFontSize}px Arial`;
     
     // Nuke indicator
     this.ctx.textAlign = 'center';
     if (this.nukeReady) {
       this.ctx.fillStyle = '#FFD700';
-      this.ctx.fillText('NUKE READY! (Press N)', this.width / 2, 80);
+      this.ctx.fillText('NUKE READY! (Press N)', this.width / 2, padding * 4);
     } else {
       // Show countdown
       const timeElapsed = performance.now() - this.lastNuke;
       const timeRemaining = Math.max(0, this.nukeCooldown - timeElapsed);
       const secondsRemaining = Math.ceil(timeRemaining / 1000);
       this.ctx.fillStyle = '#888888';
-      this.ctx.fillText(`Nuke in: ${secondsRemaining}s`, this.width / 2, 80);
+      this.ctx.fillText(`Nuke in: ${secondsRemaining}s`, this.width / 2, padding * 4);
     }
     this.ctx.textAlign = 'left';
     
@@ -356,45 +425,48 @@ export class Game {
     // Game state messages
     if (this.state === 'paused') {
       this.ctx.fillStyle = 'white';
-      this.ctx.font = '48px Arial';
+      this.ctx.font = `${Math.round(48 * this.scale)}px Arial`;
       this.ctx.textAlign = 'center';
       this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
-      this.ctx.font = '24px Arial';
-      this.ctx.fillText('Press ESC to resume', this.width / 2, this.height / 2 + 40);
+      this.ctx.font = `${baseFontSize}px Arial`;
+      this.ctx.fillText('Press ESC to resume', this.width / 2, this.height / 2 + 40 * this.scale);
       this.ctx.textAlign = 'left';
     } else if (this.state === 'gameOver') {
       this.ctx.fillStyle = 'red';
-      this.ctx.font = '48px Arial';
+      this.ctx.font = `${Math.round(48 * this.scale)}px Arial`;
       this.ctx.textAlign = 'center';
       this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2);
       this.ctx.fillStyle = 'white';
-      this.ctx.font = '24px Arial';
-      this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40);
-      this.ctx.fillText('Refresh to play again', this.width / 2, this.height / 2 + 80);
+      this.ctx.font = `${baseFontSize}px Arial`;
+      this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40 * this.scale);
+      this.ctx.fillText('Refresh to play again', this.width / 2, this.height / 2 + 80 * this.scale);
       this.ctx.textAlign = 'left';
     }
   }
 
   private drawControlsLegend() {
     // Draw controls on the right side
-    const x = this.width - 200;
-    const startY = 40;
-    const lineHeight = 30;
+    const boxWidth = Math.round(190 * this.scale);
+    const boxHeight = Math.round(170 * this.scale);
+    const x = this.width - boxWidth - Math.round(10 * this.scale);
+    const startY = Math.round(40 * this.scale);
+    const lineHeight = Math.round(30 * this.scale);
+    const padding = Math.round(10 * this.scale);
     
     this.ctx.save();
     
     // Background for controls
     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    this.ctx.fillRect(x - 10, startY - 25, 190, 170);
+    this.ctx.fillRect(x - padding, startY - Math.round(25 * this.scale), boxWidth, boxHeight);
     
     // Title
     this.ctx.fillStyle = '#FFD700';
-    this.ctx.font = 'bold 20px Arial';
+    this.ctx.font = `bold ${Math.round(20 * this.scale)}px Arial`;
     this.ctx.fillText('CONTROLS', x, startY);
     
     // Control items
     this.ctx.fillStyle = 'white';
-    this.ctx.font = '16px Arial';
+    this.ctx.font = `${Math.round(16 * this.scale)}px Arial`;
     
     const controls = [
       { key: '← →', action: 'Move' },
@@ -409,13 +481,13 @@ export class Game {
       
       // Key
       this.ctx.fillStyle = '#88CCFF';
-      this.ctx.font = 'bold 14px monospace';
+      this.ctx.font = `bold ${Math.round(14 * this.scale)}px monospace`;
       this.ctx.fillText(control.key, x, y);
       
       // Action
       this.ctx.fillStyle = 'white';
-      this.ctx.font = '14px Arial';
-      this.ctx.fillText(control.action, x + 60, y);
+      this.ctx.font = `${Math.round(14 * this.scale)}px Arial`;
+      this.ctx.fillText(control.action, x + Math.round(60 * this.scale), y);
     });
     
     this.ctx.restore();
