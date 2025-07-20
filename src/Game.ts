@@ -342,6 +342,9 @@ export class Game {
     }
     this.ctx.textAlign = 'left';
     
+    // Controls legend
+    this.drawControlsLegend();
+    
     // Game state messages
     if (this.state === 'paused') {
       this.ctx.fillStyle = 'white';
@@ -362,5 +365,50 @@ export class Game {
       this.ctx.fillText('Refresh to play again', this.width / 2, this.height / 2 + 80);
       this.ctx.textAlign = 'left';
     }
+  }
+
+  private drawControlsLegend() {
+    // Draw controls on the right side
+    const x = this.width - 200;
+    const startY = 40;
+    const lineHeight = 30;
+    
+    this.ctx.save();
+    
+    // Background for controls
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(x - 10, startY - 25, 190, 140);
+    
+    // Title
+    this.ctx.fillStyle = '#FFD700';
+    this.ctx.font = 'bold 20px Arial';
+    this.ctx.fillText('CONTROLS', x, startY);
+    
+    // Control items
+    this.ctx.fillStyle = 'white';
+    this.ctx.font = '16px Arial';
+    
+    const controls = [
+      { key: '← →', action: 'Move' },
+      { key: 'SPACE', action: 'Shoot' },
+      { key: 'N', action: 'Nuke' },
+      { key: 'ESC', action: 'Pause' }
+    ];
+    
+    controls.forEach((control, index) => {
+      const y = startY + (index + 1) * lineHeight;
+      
+      // Key
+      this.ctx.fillStyle = '#88CCFF';
+      this.ctx.font = 'bold 14px monospace';
+      this.ctx.fillText(control.key, x, y);
+      
+      // Action
+      this.ctx.fillStyle = 'white';
+      this.ctx.font = '14px Arial';
+      this.ctx.fillText(control.action, x + 60, y);
+    });
+    
+    this.ctx.restore();
   }
 }
