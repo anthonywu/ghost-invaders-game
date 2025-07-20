@@ -17,7 +17,7 @@ export class Game {
   private score: number = 0;
   private lastTime: number = 0;
   private lastShot: number = 0;
-  private shotCooldown: number = 500; // 0.5 seconds
+  private shotCooldown: number = 250; // 0.25 seconds
   
   private ghostSpawnTimer: number = 0;
   private ghostSpawnInterval: number = 2000; // 2 seconds
