@@ -6,8 +6,8 @@ import { GameState } from './types';
 export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private width: number = 1200;
-  private height: number = 800;
+  private width: number = 800;
+  private height: number = 1200;
   
   private player: Player;
   private ghosts: Ghost[] = [];

@@ -6,7 +6,7 @@ export class Player implements GameObject {
   width: number = 60;
   height: number = 40;
   color: string = '#00FF00';
-  speed: number = 300;
+  speed: number = 600;
 
   constructor(x: number, y: number) {
     this.position = { x, y };
