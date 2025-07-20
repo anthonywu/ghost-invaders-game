@@ -17,6 +17,8 @@ export class Game {
   
   private state: GameState = 'playing';
   private score: number = 0;
+  private lives: number = 3;
+  private ghostsDestroyed: number = 0;
   private lastTime: number = 0;
   private lastShot: number = 0;
   private shotCooldown: number = 250; // 0.25 seconds
@@ -149,12 +151,24 @@ export class Game {
     // Check collisions
     this.checkCollisions();
     
-    // Check game over conditions
-    this.ghosts.forEach(ghost => {
-      if (ghost.position.y + ghost.height / 2 >= this.height ||
-          this.checkGhostPlayerCollision(ghost)) {
-        this.state = 'gameOver';
+    // Check for ghosts that have reached the bottom or hit player
+    this.ghosts = this.ghosts.filter(ghost => {
+      if (ghost.position.y + ghost.height / 2 >= this.height) {
+        // Ghost escaped - lose a life
+        this.lives--;
+        if (this.lives <= 0) {
+          this.state = 'gameOver';
+        }
+        return false;
       }
+      
+      if (this.checkGhostPlayerCollision(ghost)) {
+        // Ghost hit player - game over immediately
+        this.state = 'gameOver';
+        return false;
+      }
+      
+      return true;
     });
   }
 
@@ -208,6 +222,13 @@ export class Game {
         // Create explosion effect for each destroyed ghost
         this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
         this.score += 50; // Bonus points for nuke kills
+        this.ghostsDestroyed++;
+        
+        // Check for life recovery every 100 ghosts
+        if (this.ghostsDestroyed % 100 === 0) {
+          this.lives++;
+        }
+        
         return false;
       }
       return true;
@@ -227,6 +248,13 @@ export class Game {
       this.ghosts = this.ghosts.filter(ghost => {
         if (this.checkProjectileGhostCollision(projectile, ghost)) {
           this.score += 10;
+          this.ghostsDestroyed++;
+          
+          // Check for life recovery every 100 ghosts
+          if (this.ghostsDestroyed % 100 === 0) {
+            this.lives++;
+          }
+          
           hit = true;
           return false;
         }
@@ -286,11 +314,33 @@ export class Game {
     this.ctx.font = '24px Arial';
     this.ctx.fillText(`Score: ${this.score}`, 20, 40);
     
+    // Lives indicator
+    this.ctx.fillText(`Lives: ${this.lives}`, 20, 70);
+    
+    // Ghosts destroyed counter and progress to next life
+    const ghostsToNextLife = 100 - (this.ghostsDestroyed % 100);
+    this.ctx.fillStyle = '#88FF88';
+    this.ctx.font = '18px Arial';
+    this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, 20, 100);
+    
+    // Reset font for other UI elements
+    this.ctx.fillStyle = 'white';
+    this.ctx.font = '24px Arial';
+    
     // Nuke indicator
+    this.ctx.textAlign = 'center';
     if (this.nukeReady) {
       this.ctx.fillStyle = '#FFD700';
-      this.ctx.fillText('NUKE READY! (Press N)', this.width - 250, 40);
+      this.ctx.fillText('NUKE READY! (Press N)', this.width / 2, 80);
+    } else {
+      // Show countdown
+      const timeElapsed = performance.now() - this.lastNuke;
+      const timeRemaining = Math.max(0, this.nukeCooldown - timeElapsed);
+      const secondsRemaining = Math.ceil(timeRemaining / 1000);
+      this.ctx.fillStyle = '#888888';
+      this.ctx.fillText(`Nuke in: ${secondsRemaining}s`, this.width / 2, 80);
     }
+    this.ctx.textAlign = 'left';
     
     // Game state messages
     if (this.state === 'paused') {
