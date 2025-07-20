@@ -328,8 +328,11 @@ export class Game {
       }
       
       if (this.checkGhostPlayerCollision(ghost)) {
-        // Ghost hit player - game over immediately
-        this.state = 'gameOver';
+        // Ghost hit player - lose a life
+        this.lives--;
+        if (this.lives <= 0) {
+          this.state = 'gameOver';
+        }
         return false;
       }
       
