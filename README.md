@@ -1,10 +1,16 @@
-# Space Invaders Kids Game
+# Ghost Invaders Kids Game
 
 A fun, kid-friendly Space Invaders game featuring colorful Pac-Man style ghosts!
 
+Free Play at: http://ghost-invaders.anthony-wu.com
+
+No logins, no ads, Wi-Fi not required.
+
+# Development
+
 ## Prerequisites
 
-- [Bun](https://bun.sh) (recommended) or Node.js
+- [Bun](https://bun.sh)
 - A modern web browser
 
 ## Installation
@@ -14,17 +20,13 @@ A fun, kid-friendly Space Invaders game featuring colorful Pac-Man style ghosts!
 3. Install dependencies:
    ```bash
    bun install
-   # or if using npm:
-   # npm install
    ```
 
 ## Running the Game
 
 Start the development server:
 ```bash
-bun run dev
-# or if using npm:
-# npm run dev
+just dev
 ```
 
 Then open your browser and navigate to: http://localhost:5173/
@@ -48,8 +50,6 @@ Then open your browser and navigate to: http://localhost:5173/
 To build the game for deployment:
 ```bash
 bun run build
-# or if using npm:
-# npm run build
 ```
 
 The built files will be in the `dist` directory.
@@ -57,13 +57,12 @@ The built files will be in the `dist` directory.
 To preview the production build:
 ```bash
 bun run preview
-# or if using npm:
-# npm run preview
 ```
 
 ## Development
 
-Built with:
+Vibe coded:
+
 - TypeScript
 - Vite
 - HTML5 Canvas
