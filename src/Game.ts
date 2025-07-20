@@ -32,6 +32,9 @@ export class Game {
   private lastNuke: number = 0;
   private nukeCooldown: number = 60000; // 1 minute
   private nukeReady: boolean = false;
+  
+  // UI controls
+  private showControls: boolean = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -49,6 +52,9 @@ export class Game {
       this.keys.add(e.key);
       if (e.key === 'Escape') {
         this.togglePause();
+      }
+      if (e.key.toLowerCase() === 'h') {
+        this.showControls = !this.showControls;
       }
     });
     
@@ -343,7 +349,9 @@ export class Game {
     this.ctx.textAlign = 'left';
     
     // Controls legend
-    this.drawControlsLegend();
+    if (this.showControls) {
+      this.drawControlsLegend();
+    }
     
     // Game state messages
     if (this.state === 'paused') {
@@ -377,7 +385,7 @@ export class Game {
     
     // Background for controls
     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    this.ctx.fillRect(x - 10, startY - 25, 190, 140);
+    this.ctx.fillRect(x - 10, startY - 25, 190, 170);
     
     // Title
     this.ctx.fillStyle = '#FFD700';
@@ -392,7 +400,8 @@ export class Game {
       { key: '← →', action: 'Move' },
       { key: 'SPACE', action: 'Shoot' },
       { key: 'N', action: 'Nuke' },
-      { key: 'ESC', action: 'Pause' }
+      { key: 'ESC', action: 'Pause' },
+      { key: 'H', action: 'Hide' }
     ];
     
     controls.forEach((control, index) => {
