@@ -4,7 +4,9 @@ main = "./worker/index.ts"
 workers_dev = true
 
 routes = [
-  { pattern = "ghost-invaders.anthony-wu.com/*", zone_name = "anthony-wu.com" }
+  { pattern = "ghost-invaders.anthony-wu.com/*", zone_name = "anthony-wu.com" },
+  { pattern = "ghost-invaders.com/*", zone_name = "ghost-invaders.com" },
+  { pattern = "www.ghost-invaders.com/*", zone_name = "ghost-invaders.com" }
 ]
 
 [assets]
