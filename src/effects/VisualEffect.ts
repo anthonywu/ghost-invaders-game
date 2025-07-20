@@ -81,23 +81,29 @@ export class ExplosionEffect implements VisualEffect {
   private particles: Particle[] = [];
   private duration: number = 1.0; // seconds
   private elapsed: number = 0;
+  private baseColor: string;
 
   constructor(position: Vector2D, color: string = '#FF00FF') {
     this.position = { ...position };
+    this.baseColor = color;
     
-    // Create explosion particles
-    const particleCount = 20;
+    // Create explosion particles with more variety
+    const particleCount = 30; // More particles for dramatic effect
     for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const speed = 100 + Math.random() * 200;
+      const angle = Math.random() * Math.PI * 2; // Random angles for more natural explosion
+      const speed = 50 + Math.random() * 250; // Varied speeds
+      const size = 2 + Math.random() * 6; // Varied sizes
+      
       this.particles.push({
         x: position.x,
         y: position.y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        size: 3 + Math.random() * 4,
+        size: size,
         color: color,
-        opacity: 1
+        opacity: 1,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 10
       });
     }
   }
@@ -113,10 +119,24 @@ export class ExplosionEffect implements VisualEffect {
     const progress = this.elapsed / this.duration;
     
     this.particles.forEach(particle => {
+      // Update position
       particle.x += particle.vx * deltaTime;
       particle.y += particle.vy * deltaTime;
-      particle.opacity = 1 - progress;
-      particle.size *= 0.98; // Shrink particles
+      
+      // Add gravity effect
+      particle.vy += 200 * deltaTime; // Gravity
+      
+      // Update opacity with easing
+      particle.opacity = Math.pow(1 - progress, 2);
+      
+      // Shrink particles more dramatically
+      particle.size *= 0.95;
+      
+      // Rotate particles
+      particle.rotation += particle.rotationSpeed * deltaTime;
+      
+      // Slow down horizontal movement
+      particle.vx *= 0.98;
     });
   }
 
@@ -126,10 +146,34 @@ export class ExplosionEffect implements VisualEffect {
     ctx.save();
     
     this.particles.forEach(particle => {
-      ctx.fillStyle = `rgba(255, ${Math.floor(255 * particle.opacity)}, ${Math.floor(255 * particle.opacity)}, ${particle.opacity})`;
+      ctx.save();
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(particle.rotation);
+      
+      // Create gradient for each particle
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, particle.size);
+      
+      // Parse base color to extract RGB values (assuming hex format)
+      const r = parseInt(this.baseColor.slice(1, 3), 16);
+      const g = parseInt(this.baseColor.slice(3, 5), 16);
+      const b = parseInt(this.baseColor.slice(5, 7), 16);
+      
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${particle.opacity})`);
+      gradient.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${particle.opacity})`);
+      gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      
+      ctx.fillStyle = gradient;
+      
+      // Draw particle as a small irregular shape
       ctx.beginPath();
-      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+      ctx.moveTo(-particle.size, 0);
+      ctx.lineTo(0, -particle.size * 0.7);
+      ctx.lineTo(particle.size * 0.8, 0);
+      ctx.lineTo(0, particle.size);
+      ctx.closePath();
       ctx.fill();
+      
+      ctx.restore();
     });
 
     ctx.restore();
@@ -144,4 +188,6 @@ interface Particle {
   size: number;
   color: string;
   opacity: number;
+  rotation: number;
+  rotationSpeed: number;
 }

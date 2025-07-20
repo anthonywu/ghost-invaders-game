@@ -34,6 +34,11 @@ export class Game {
   private nukeCooldown: number = 60000; // 1 minute
   private nukeReady: boolean = false;
   
+  // Life lost blinking effect
+  private lifeLostTime: number = 0;
+  private lifeLostBlinkDuration: number = 3000; // 3 seconds
+  private lifeLostBlinkInterval: number = 200; // Blink every 200ms
+  
   // UI controls
   private showControls: boolean = true;
   
@@ -321,6 +326,7 @@ export class Game {
       if (ghost.position.y + ghost.height / 2 >= this.height) {
         // Ghost escaped - lose a life
         this.lives--;
+        this.lifeLostTime = performance.now();
         if (this.lives <= 0) {
           this.state = 'gameOver';
         }
@@ -330,6 +336,7 @@ export class Game {
       if (this.checkGhostPlayerCollision(ghost)) {
         // Ghost hit player - lose a life
         this.lives--;
+        this.lifeLostTime = performance.now();
         if (this.lives <= 0) {
           this.state = 'gameOver';
         }
@@ -434,6 +441,9 @@ export class Game {
       let hit = false;
       this.ghosts = this.ghosts.filter(ghost => {
         if (this.checkProjectileGhostCollision(projectile, ghost)) {
+          // Create explosion effect for destroyed ghost
+          this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
+          
           this.score += 10;
           this.ghostsDestroyed++;
           
@@ -505,8 +515,22 @@ export class Game {
     this.ctx.font = `${baseFontSize}px Arial`;
     this.ctx.fillText(`Score: ${this.score}`, padding, padding * 2);
     
-    // Lives indicator
+    // Lives indicator with blinking effect
+    const currentTime = performance.now();
+    const timeSinceLifeLost = currentTime - this.lifeLostTime;
+    
+    if (timeSinceLifeLost < this.lifeLostBlinkDuration) {
+      // Blink between red and white
+      const blinkPhase = Math.floor(timeSinceLifeLost / this.lifeLostBlinkInterval);
+      this.ctx.fillStyle = blinkPhase % 2 === 0 ? 'red' : 'white';
+    } else {
+      this.ctx.fillStyle = 'white';
+    }
+    
     this.ctx.fillText(`Lives: ${this.lives}`, padding, padding * 3.5);
+    
+    // Reset fill style for subsequent drawing
+    this.ctx.fillStyle = 'white';
     
     // Ghosts destroyed counter and progress to next life
     const ghostsToNextLife = 100 - (this.ghostsDestroyed % 100);
