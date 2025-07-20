@@ -2,6 +2,7 @@ import { Player } from './Player';
 import { Ghost } from './Ghost';
 import { Projectile } from './Projectile';
 import { GameState } from './types';
+import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffect';
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -12,6 +13,7 @@ export class Game {
   private player: Player;
   private ghosts: Ghost[] = [];
   private projectiles: Projectile[] = [];
+  private visualEffects: VisualEffect[] = [];
   
   private state: GameState = 'playing';
   private score: number = 0;
@@ -104,6 +106,12 @@ export class Game {
       return !projectile.isOffScreen();
     });
     
+    // Update visual effects
+    this.visualEffects = this.visualEffects.filter(effect => {
+      effect.update(deltaTime);
+      return !effect.isComplete;
+    });
+    
     // Update ghosts
     this.ghosts.forEach(ghost => {
       ghost.update(deltaTime);
@@ -186,6 +194,9 @@ export class Game {
     // Calculate blast radius (half screen height)
     const blastRadius = this.height / 2;
     
+    // Create nuke visual effect
+    this.visualEffects.push(new NukeEffect(this.player.position, blastRadius));
+    
     // Remove all ghosts within blast radius
     this.ghosts = this.ghosts.filter(ghost => {
       const distance = Math.sqrt(
@@ -194,6 +205,8 @@ export class Game {
       );
       
       if (distance <= blastRadius) {
+        // Create explosion effect for each destroyed ghost
+        this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
         this.score += 50; // Bonus points for nuke kills
         return false;
       }
@@ -251,6 +264,7 @@ export class Game {
       this.player.render(this.ctx);
       this.ghosts.forEach(ghost => ghost.render(this.ctx));
       this.projectiles.forEach(projectile => projectile.render(this.ctx));
+      this.visualEffects.forEach(effect => effect.render(this.ctx));
     }
     
     // Draw UI

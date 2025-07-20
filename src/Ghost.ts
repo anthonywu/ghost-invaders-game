@@ -54,7 +54,6 @@ export class Ghost implements GameObject {
     // Wavy bottom edge
     const waves = 3;
     const waveWidth = this.width / waves;
-    const waveHeight = this.height / 8;
     
     for (let i = waves - 1; i >= 0; i--) {
       const x = this.position.x - this.width/2 + (i * waveWidth);
