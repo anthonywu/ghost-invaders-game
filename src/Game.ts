@@ -7,8 +7,8 @@ import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffec
 export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private width: number;
-  private height: number;
+  private width: number = 800;
+  private height: number = 1200;
   private scale: number = 1;
   
   private player: Player;
@@ -36,6 +36,15 @@ export class Game {
   
   // UI controls
   private showControls: boolean = true;
+  
+  // Mobile controls
+  private isMobile: boolean = false;
+  private touchStartX: number = 0;
+  private swipeThreshold: number = 20; // pixels - increased for better control
+  private isMovingLeft: boolean = false;
+  private isMovingRight: boolean = false;
+  private swipeSpeedMultiplier: number = 1.5; // 1.5x speed for better control
+  private controlsBoxBounds?: { x: number; y: number; width: number; height: number };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -48,6 +57,10 @@ export class Game {
     this.player.width *= this.scale;
     this.player.height *= this.scale;
     this.player.speed *= this.scale;
+    
+    // Detect mobile device
+    this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                    ('ontouchstart' in window);
     
     this.setupEventListeners();
   }
@@ -94,6 +107,93 @@ export class Game {
     // Handle window resize
     window.addEventListener('resize', () => {
       this.handleResize();
+    });
+    
+    // Mobile controls
+    if (this.isMobile) {
+      this.setupMobileControls();
+    }
+  }
+
+  private setupMobileControls() {
+    // Touch start - record position and shoot
+    this.canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      this.touchStartX = touch.clientX;
+      
+      // Shoot on tap
+      const currentTime = performance.now();
+      if (currentTime - this.lastShot >= this.shotCooldown) {
+        this.shoot();
+        this.lastShot = currentTime;
+      }
+    });
+    
+    // Touch move - detect swipe direction for movement
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - this.touchStartX;
+      
+      // Check if swiping on controls box to hide it
+      if (this.showControls && this.controlsBoxBounds) {
+        const rect = this.canvas.getBoundingClientRect();
+        const touchX = touch.clientX - rect.left;
+        const touchY = touch.clientY - rect.top;
+        
+        // Scale touch coordinates to canvas coordinates
+        const canvasX = touchX * (this.width / rect.width);
+        const canvasY = touchY * (this.height / rect.height);
+        
+        // Check if touch is within controls box
+        if (canvasX >= this.controlsBoxBounds.x &&
+            canvasX <= this.controlsBoxBounds.x + this.controlsBoxBounds.width &&
+            canvasY >= this.controlsBoxBounds.y &&
+            canvasY <= this.controlsBoxBounds.y + this.controlsBoxBounds.height) {
+          // Hide controls on any swipe within the box
+          if (Math.abs(deltaX) > this.swipeThreshold) {
+            this.showControls = false;
+            return;
+          }
+        }
+      }
+      
+      // Check for horizontal swipe (movement)
+      if (Math.abs(deltaX) > this.swipeThreshold) {
+        if (deltaX > 0) {
+          // Swipe right
+          this.isMovingRight = true;
+          this.isMovingLeft = false;
+        } else {
+          // Swipe left
+          this.isMovingLeft = true;
+          this.isMovingRight = false;
+        }
+        
+        // Reset start position for continuous swiping
+        this.touchStartX = touch.clientX;
+      }
+    });
+    
+    // Touch end - stop movement
+    this.canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.isMovingLeft = false;
+      this.isMovingRight = false;
+    });
+    
+    // Double tap for nuke
+    let lastTapTime = 0;
+    this.canvas.addEventListener('touchstart', () => {
+      const currentTime = performance.now();
+      if (currentTime - lastTapTime < 300 && this.nukeReady) {
+        // Double tap detected
+        this.fireNuke();
+        this.lastNuke = currentTime;
+        this.nukeReady = false;
+      }
+      lastTapTime = currentTime;
     });
   }
 
@@ -239,15 +339,27 @@ export class Game {
 
   private handleInput(currentTime: number) {
     // Player movement
-    if (this.keys.has('ArrowLeft')) {
-      this.player.moveLeft();
-    } else if (this.keys.has('ArrowRight')) {
-      this.player.moveRight();
+    if (this.isMobile) {
+      // Use swipe controls for mobile with speed multiplier
+      if (this.isMovingLeft) {
+        this.player.velocity.x = -this.player.speed * this.swipeSpeedMultiplier;
+      } else if (this.isMovingRight) {
+        this.player.velocity.x = this.player.speed * this.swipeSpeedMultiplier;
+      } else {
+        this.player.stop();
+      }
     } else {
-      this.player.stop();
+      // Use keyboard for desktop
+      if (this.keys.has('ArrowLeft')) {
+        this.player.moveLeft();
+      } else if (this.keys.has('ArrowRight')) {
+        this.player.moveRight();
+      } else {
+        this.player.stop();
+      }
     }
     
-    // Shooting
+    // Shooting (keyboard only - touch is handled in event listener)
     if (this.keys.has(' ') && currentTime - this.lastShot >= this.shotCooldown) {
       this.shoot();
       this.lastShot = currentTime;
@@ -308,7 +420,8 @@ export class Game {
     const ghost = new Ghost(x, -40 * this.scale);
     ghost.width *= this.scale;
     ghost.height *= this.scale;
-    ghost.speed *= this.scale;
+    ghost.baseSpeed *= this.scale;
+    ghost.evasionSpeed *= this.scale;
     this.ghosts.push(ghost);
   }
 
@@ -446,11 +559,11 @@ export class Game {
 
   private drawControlsLegend() {
     // Draw controls on the right side
-    const boxWidth = Math.round(190 * this.scale);
-    const boxHeight = Math.round(170 * this.scale);
+    const boxWidth = Math.round(this.isMobile ? 250 * this.scale : 190 * this.scale);
+    const boxHeight = Math.round(this.isMobile ? 200 * this.scale : 170 * this.scale);
     const x = this.width - boxWidth - Math.round(10 * this.scale);
     const startY = Math.round(40 * this.scale);
-    const lineHeight = Math.round(30 * this.scale);
+    const lineHeight = Math.round(this.isMobile ? 40 * this.scale : 30 * this.scale);
     const padding = Math.round(10 * this.scale);
     
     this.ctx.save();
@@ -459,16 +572,31 @@ export class Game {
     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     this.ctx.fillRect(x - padding, startY - Math.round(25 * this.scale), boxWidth, boxHeight);
     
+    // Store box bounds for swipe detection
+    if (this.isMobile) {
+      this.controlsBoxBounds = {
+        x: x - padding,
+        y: startY - Math.round(25 * this.scale),
+        width: boxWidth,
+        height: boxHeight
+      };
+    }
+    
     // Title
     this.ctx.fillStyle = '#FFD700';
-    this.ctx.font = `bold ${Math.round(20 * this.scale)}px Arial`;
+    this.ctx.font = `bold ${Math.round(this.isMobile ? 28 * this.scale : 20 * this.scale)}px Arial`;
     this.ctx.fillText('CONTROLS', x, startY);
     
     // Control items
     this.ctx.fillStyle = 'white';
-    this.ctx.font = `${Math.round(16 * this.scale)}px Arial`;
+    this.ctx.font = `${Math.round(this.isMobile ? 22 * this.scale : 16 * this.scale)}px Arial`;
     
-    const controls = [
+    const controls = this.isMobile ? [
+      { key: 'SWIPE ←→', action: 'Move' },
+      { key: 'TAP', action: 'Shoot' },
+      { key: '2xTAP', action: 'Nuke' },
+      { key: 'SWIPE AWAY', action: 'Hide' }
+    ] : [
       { key: '← →', action: 'Move' },
       { key: 'SPACE', action: 'Shoot' },
       { key: 'N', action: 'Nuke' },
@@ -481,13 +609,13 @@ export class Game {
       
       // Key
       this.ctx.fillStyle = '#88CCFF';
-      this.ctx.font = `bold ${Math.round(14 * this.scale)}px monospace`;
+      this.ctx.font = `bold ${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px monospace`;
       this.ctx.fillText(control.key, x, y);
       
       // Action
       this.ctx.fillStyle = 'white';
-      this.ctx.font = `${Math.round(14 * this.scale)}px Arial`;
-      this.ctx.fillText(control.action, x + Math.round(60 * this.scale), y);
+      this.ctx.font = `${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px Arial`;
+      this.ctx.fillText(control.action, x + Math.round(this.isMobile ? 120 * this.scale : 60 * this.scale), y);
     });
     
     this.ctx.restore();
