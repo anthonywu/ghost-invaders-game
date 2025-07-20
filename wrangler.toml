@@ -1,0 +1,12 @@
+name = "ghost-invaders"
+compatibility_date = "2025-04-01"
+main = "./worker/index.ts"
+workers_dev = true
+
+routes = [
+  { pattern = "ghost-invaders.anthony-wu.com/*", zone_name = "anthony-wu.com" }
+]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
