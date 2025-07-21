@@ -79,15 +79,19 @@ export class Ghost implements GameObject {
     this.hitPoints--;
     
     if (this.hitPoints > 0) {
-      if (this.type === 'rainbow' && this.hitPoints === 2) {
-        // Rainbow ghost becomes white ghost after first hit
-        this.type = 'special';
-        this.width = 80;
-        this.height = 80;
-        this.color = '#FFFFFF';
-        this.isRainbow = false;
-      } else if ((this.type === 'special' || (this.type === 'rainbow' && this.hitPoints === 1))) {
-        // Shrink to normal size after hit
+      if (this.type === 'rainbow') {
+        // Rainbow ghost shrinks but stays rainbow
+        if (this.hitPoints === 2) {
+          // Shrink to 2x size
+          this.width = 80;
+          this.height = 80;
+        } else if (this.hitPoints === 1) {
+          // Shrink to normal size
+          this.width = 40;
+          this.height = 40;
+        }
+      } else if (this.type === 'special') {
+        // Special white ghost shrinks to normal size
         this.width = 40;
         this.height = 40;
       }

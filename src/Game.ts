@@ -471,8 +471,8 @@ export class Game {
             
             // Points based on ghost type
             let points = 10;
-            if (ghost.type === 'special' && ghost.maxHitPoints === 2) {
-              points = 20; // White ghost from rainbow
+            if (ghost.type === 'rainbow') {
+              points = 20; // Rainbow ghost destroyed
             } else if (ghost.type === 'special') {
               points = 50; // Original white ghost
             }
@@ -486,7 +486,7 @@ export class Game {
             }
             
             // Area damage for rainbow ghost destruction
-            if (ghost.maxHitPoints === 3) { // Was a rainbow ghost
+            if (ghost.type === 'rainbow') {
               this.handleRainbowGhostExplosion(ghost);
             }
           } else {
