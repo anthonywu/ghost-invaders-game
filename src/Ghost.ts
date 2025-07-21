@@ -33,7 +33,7 @@ export class Ghost implements GameObject {
         this.color = 'rainbow'; // Special color indicator
         this.hitPoints = 3;
         this.maxHitPoints = 3;
-        this.baseSpeed = 30; // Even slower
+        this.baseSpeed = 100; // 2x speed of regular ghosts
         this.isRainbow = true;
         break;
       case 'special':
@@ -45,7 +45,7 @@ export class Ghost implements GameObject {
         this.color = '#FFFFFF';
         this.hitPoints = 2;
         this.maxHitPoints = 2;
-        this.baseSpeed = 40; // Slightly slower
+        this.baseSpeed = 75; // 1.5x speed of regular ghosts
         break;
       default:
         this.color = RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)];

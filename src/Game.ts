@@ -54,6 +54,9 @@ export class Game {
   private isMovingRight: boolean = false;
   private swipeSpeedMultiplier: number = 1.5; // 1.5x speed for better control
   private controlsBoxBounds?: { x: number; y: number; width: number; height: number };
+  
+  // Parallax stars
+  private starLayers: StarLayer[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -70,6 +73,9 @@ export class Game {
     // Detect mobile device
     this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
                     ('ontouchstart' in window);
+    
+    // Initialize parallax star layers
+    this.initializeStarLayers();
     
     this.setupEventListeners();
   }
@@ -229,6 +235,14 @@ export class Game {
       projectile.position.x = (projectile.position.x / oldWidth) * this.width;
       projectile.position.y = (projectile.position.y / oldHeight) * this.height;
     });
+    
+    // Adjust star positions proportionally
+    this.starLayers.forEach(layer => {
+      layer.stars.forEach(star => {
+        star.x = (star.x / oldWidth) * this.width;
+        star.y = (star.y / oldHeight) * this.height;
+      });
+    });
   }
 
   private togglePause() {
@@ -258,6 +272,9 @@ export class Game {
   }
 
   private update(deltaTime: number, currentTime: number) {
+    // Update parallax stars
+    this.updateStarLayers(deltaTime);
+    
     // Update nuke availability
     if (currentTime - this.lastNuke >= this.nukeCooldown) {
       this.nukeReady = true;
@@ -548,14 +565,75 @@ export class Game {
     this.drawUI();
   }
 
+  private initializeStarLayers() {
+    // Create 3 layers of stars for parallax effect
+    const layers = [
+      { speed: 20, count: 50, sizeRange: [0.5, 1], opacity: 0.4 }, // Far layer
+      { speed: 50, count: 30, sizeRange: [1, 2], opacity: 0.7 },   // Middle layer
+      { speed: 100, count: 20, sizeRange: [2, 3], opacity: 1.0 }   // Near layer
+    ];
+    
+    layers.forEach((config) => {
+      const stars: Star[] = [];
+      for (let i = 0; i < config.count; i++) {
+        stars.push({
+          x: Math.random() * this.width,
+          y: Math.random() * this.height,
+          size: config.sizeRange[0] + Math.random() * (config.sizeRange[1] - config.sizeRange[0]),
+          twinkle: Math.random() * Math.PI * 2,
+          twinkleSpeed: 0.5 + Math.random() * 2
+        });
+      }
+      
+      this.starLayers.push({
+        stars,
+        speed: config.speed,
+        opacity: config.opacity
+      });
+    });
+  }
+  
+  private updateStarLayers(deltaTime: number) {
+    this.starLayers.forEach(layer => {
+      layer.stars.forEach(star => {
+        // Move star downward
+        star.y += layer.speed * deltaTime;
+        
+        // Update twinkle effect
+        star.twinkle += star.twinkleSpeed * deltaTime;
+        
+        // Wrap star to top when it goes off bottom
+        if (star.y > this.height + star.size) {
+          star.y = -star.size;
+          star.x = Math.random() * this.width;
+        }
+      });
+    });
+  }
+  
   private drawStars() {
-    this.ctx.fillStyle = 'white';
-    for (let i = 0; i < 100; i++) {
-      const x = (i * 137) % this.width;
-      const y = (i * 89) % this.height;
-      const size = (i % 3) + 1;
-      this.ctx.fillRect(x, y, size, size);
-    }
+    // Draw parallax star layers from back to front
+    this.starLayers.forEach(layer => {
+      layer.stars.forEach(star => {
+        // Calculate twinkle effect
+        const twinkleOpacity = 0.5 + 0.5 * Math.sin(star.twinkle);
+        const finalOpacity = layer.opacity * twinkleOpacity;
+        
+        // Draw star with gradient for better effect
+        const gradient = this.ctx.createRadialGradient(
+          star.x, star.y, 0,
+          star.x, star.y, star.size
+        );
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${finalOpacity})`);
+        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${finalOpacity * 0.8})`);
+        gradient.addColorStop(1, `rgba(150, 150, 255, 0)`);
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        this.ctx.fill();
+      });
+    });
   }
 
   private drawUI() {
@@ -729,4 +807,18 @@ export class Game {
     
     this.ctx.restore();
   }
+}
+
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  twinkle: number;
+  twinkleSpeed: number;
+}
+
+interface StarLayer {
+  stars: Star[];
+  speed: number;
+  opacity: number;
 }
