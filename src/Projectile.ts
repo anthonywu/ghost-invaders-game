@@ -18,23 +18,30 @@ export class Projectile implements GameObject {
   }
 
   render(ctx: CanvasRenderingContext2D) {
-    // Draw projectile with trail effect
-    const gradient = ctx.createLinearGradient(
-      this.position.x, 
-      this.position.y + this.height,
-      this.position.x, 
-      this.position.y
-    );
-    gradient.addColorStop(0, 'rgba(255, 255, 0, 0.2)');
-    gradient.addColorStop(1, this.color);
+    // Draw projectile with trail effect using simple colors
+    ctx.save();
     
-    ctx.fillStyle = gradient;
+    // Draw trail
+    ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+    ctx.fillRect(
+      this.position.x - this.width/2, 
+      this.position.y + this.height * 0.5, 
+      this.width, 
+      this.height * 0.7
+    );
+    
+    // Draw main projectile body
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = this.color;
     ctx.fillRect(
       this.position.x - this.width/2, 
       this.position.y, 
       this.width, 
-      this.height
+      this.height * 0.6
     );
+    
+    ctx.restore();
   }
 
   isOffScreen(): boolean {

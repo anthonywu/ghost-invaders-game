@@ -42,24 +42,28 @@ export class NukeEffect implements VisualEffect {
 
     ctx.save();
     
-    // Create gradient for fireball effect
-    const gradient = ctx.createRadialGradient(
-      this.position.x, this.position.y, 0,
-      this.position.x, this.position.y, this.radius
-    );
+    // Draw multiple layers for fireball effect without gradients
+    const layers = [
+      { scale: 1.0, color: `rgba(128, 0, 0, ${this.opacity * 0.2})` },
+      { scale: 0.8, color: `rgba(255, 0, 0, ${this.opacity * 0.3})` },
+      { scale: 0.6, color: `rgba(255, 127, 0, ${this.opacity * 0.4})` },
+      { scale: 0.4, color: `rgba(255, 255, 0, ${this.opacity * 0.6})` },
+      { scale: 0.2, color: `rgba(255, 255, 255, ${this.opacity * 0.8})` }
+    ];
     
-    // Fireball colors
-    gradient.addColorStop(0, `rgba(255, 255, 255, ${this.opacity})`);
-    gradient.addColorStop(0.2, `rgba(255, 255, 0, ${this.opacity * 0.8})`);
-    gradient.addColorStop(0.5, `rgba(255, 127, 0, ${this.opacity * 0.6})`);
-    gradient.addColorStop(0.8, `rgba(255, 0, 0, ${this.opacity * 0.4})`);
-    gradient.addColorStop(1, `rgba(128, 0, 0, 0)`);
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
-
+    // Draw layers from outside to inside
+    layers.forEach(layer => {
+      ctx.fillStyle = layer.color;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = layer.color;
+      ctx.beginPath();
+      ctx.arc(this.position.x, this.position.y, this.radius * layer.scale, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    
+    // Reset shadow for shockwave
+    ctx.shadowBlur = 0;
+    
     // Add shockwave ring
     ctx.strokeStyle = `rgba(255, 255, 255, ${this.opacity * 0.5})`;
     ctx.lineWidth = 3;
@@ -145,32 +149,32 @@ export class ExplosionEffect implements VisualEffect {
 
     ctx.save();
     
+    // Parse base color once for all particles
+    const r = parseInt(this.baseColor.slice(1, 3), 16);
+    const g = parseInt(this.baseColor.slice(3, 5), 16);
+    const b = parseInt(this.baseColor.slice(5, 7), 16);
+    
     this.particles.forEach(particle => {
       ctx.save();
       ctx.translate(particle.x, particle.y);
       ctx.rotate(particle.rotation);
       
-      // Create gradient for each particle
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, particle.size);
+      // Use simple color with opacity instead of gradient
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${particle.opacity})`;
       
-      // Parse base color to extract RGB values (assuming hex format)
-      const r = parseInt(this.baseColor.slice(1, 3), 16);
-      const g = parseInt(this.baseColor.slice(3, 5), 16);
-      const b = parseInt(this.baseColor.slice(5, 7), 16);
+      // Draw particle as a simple circle with glow effect
+      ctx.shadowBlur = particle.size * 2;
+      ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${particle.opacity * 0.5})`;
       
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${particle.opacity})`);
-      gradient.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${particle.opacity})`);
-      gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
-      
-      ctx.fillStyle = gradient;
-      
-      // Draw particle as a small irregular shape
       ctx.beginPath();
-      ctx.moveTo(-particle.size, 0);
-      ctx.lineTo(0, -particle.size * 0.7);
-      ctx.lineTo(particle.size * 0.8, 0);
-      ctx.lineTo(0, particle.size);
-      ctx.closePath();
+      ctx.arc(0, 0, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Add a bright center
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = `rgba(255, 255, 255, ${particle.opacity * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, particle.size * 0.3, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.restore();

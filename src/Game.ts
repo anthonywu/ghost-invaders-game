@@ -619,19 +619,26 @@ export class Game {
         const twinkleOpacity = 0.5 + 0.5 * Math.sin(star.twinkle);
         const finalOpacity = layer.opacity * twinkleOpacity;
         
-        // Draw star with gradient for better effect
-        const gradient = this.ctx.createRadialGradient(
-          star.x, star.y, 0,
-          star.x, star.y, star.size
-        );
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${finalOpacity})`);
-        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${finalOpacity * 0.8})`);
-        gradient.addColorStop(1, `rgba(150, 150, 255, 0)`);
+        // Draw star with simple glow effect instead of gradient
+        this.ctx.save();
         
-        this.ctx.fillStyle = gradient;
+        // Outer glow using shadowBlur
+        this.ctx.shadowBlur = star.size * 3;
+        this.ctx.shadowColor = `rgba(150, 150, 255, ${finalOpacity * 0.5})`;
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${finalOpacity})`;
+        
         this.ctx.beginPath();
-        this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        this.ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
         this.ctx.fill();
+        
+        // Center bright point
+        this.ctx.shadowBlur = 0;
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${finalOpacity})`;
+        this.ctx.beginPath();
+        this.ctx.arc(star.x, star.y, star.size * 0.3, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        this.ctx.restore();
       });
     });
   }
