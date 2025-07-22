@@ -1,6 +1,6 @@
 import { GameObject, Vector2D, RAINBOW_COLORS } from './types';
 
-export type GhostType = 'normal' | 'special' | 'rainbow';
+export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss';
 
 export class Ghost implements GameObject {
   position: Vector2D;
@@ -18,6 +18,8 @@ export class Ghost implements GameObject {
   originalWidth: number = 40;
   originalHeight: number = 40;
   isRainbow: boolean = false;
+  pulseTime: number = 0;
+  isBoss: boolean = false;
 
   constructor(x: number, y: number, type: GhostType = 'normal') {
     this.position = { x, y };
@@ -47,6 +49,18 @@ export class Ghost implements GameObject {
         this.maxHitPoints = 2;
         this.baseSpeed = 75; // 1.5x speed of regular ghosts
         break;
+      case 'boss':
+        // Boss pink ghost - nuclear explosion on hit (4x size)
+        this.width = 160;
+        this.height = 160;
+        this.originalWidth = 160;
+        this.originalHeight = 160;
+        this.color = '#FF69B4'; // Hot pink
+        this.hitPoints = 1;
+        this.maxHitPoints = 1;
+        this.baseSpeed = 30; // Slower, more menacing
+        this.isBoss = true;
+        break;
       default:
         this.color = RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)];
         break;
@@ -73,6 +87,11 @@ export class Ghost implements GameObject {
     
     this.position.x += this.velocity.x * deltaTime;
     this.position.y += this.velocity.y * deltaTime;
+    
+    // Update pulse animation for boss ghost
+    if (this.isBoss) {
+      this.pulseTime += deltaTime * 3; // Faster pulsing for unstable effect
+    }
   }
 
   takeDamage(): boolean {
@@ -104,6 +123,23 @@ export class Ghost implements GameObject {
   render(ctx: CanvasRenderingContext2D) {
     // Draw Pac-Man style ghost
     ctx.save();
+    
+    // Apply pulsing effect for boss ghost
+    if (this.isBoss) {
+      const pulse = Math.sin(this.pulseTime) * 0.2 + 0.8;
+      const glowIntensity = Math.abs(Math.sin(this.pulseTime * 2));
+      
+      // Scale effect
+      ctx.translate(this.position.x, this.position.y);
+      ctx.scale(pulse, pulse);
+      ctx.translate(-this.position.x, -this.position.y);
+      
+      // Unstable red glow
+      ctx.shadowColor = `rgba(255, 0, 0, ${glowIntensity})`;
+      ctx.shadowBlur = 30 + glowIntensity * 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
     
     // Ghost body
     if (this.isRainbow) {

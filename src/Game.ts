@@ -30,6 +30,10 @@ export class Game {
   private specialGhostInterval: number = 30000; // 30 seconds
   private rainbowGhostTimer: number = 0;
   private rainbowGhostInterval: number = 120000; // 2 minutes
+  private bossGhostTimer: number = 0;
+  private bossGhostInterval: number = 180000; // 3 minutes
+  private forceBossSpawn: boolean = false;
+  private forceBossSpawnTimer: number = 0;
   
   private keys: Set<string> = new Set();
   
@@ -112,6 +116,11 @@ export class Game {
       }
       if (e.key.toLowerCase() === 'h') {
         this.showControls = !this.showControls;
+      }
+      if (e.key.toLowerCase() === 'b') {
+        // Trigger boss spawn in 5 seconds
+        this.forceBossSpawn = true;
+        this.forceBossSpawnTimer = 5000; // 5 seconds
       }
     });
     
@@ -353,6 +362,23 @@ export class Game {
       this.rainbowGhostTimer = 0;
     }
     
+    // Spawn boss ghost every 3 minutes or on demand
+    this.bossGhostTimer += deltaTime * 1000;
+    if (this.bossGhostTimer >= this.bossGhostInterval) {
+      this.spawnGhost('boss');
+      this.bossGhostTimer = 0;
+    }
+    
+    // Handle forced boss spawn from hotkey
+    if (this.forceBossSpawn) {
+      this.forceBossSpawnTimer -= deltaTime * 1000;
+      if (this.forceBossSpawnTimer <= 0) {
+        this.spawnGhost('boss');
+        this.forceBossSpawn = false;
+        this.bossGhostTimer = 0; // Reset regular timer
+      }
+    }
+    
     // Check collisions
     this.checkCollisions();
     
@@ -464,6 +490,7 @@ export class Game {
     let baseSize = 40;
     if (type === 'special') baseSize = 80;
     if (type === 'rainbow') baseSize = 120;
+    if (type === 'boss') baseSize = 160; // 4x regular size
     
     const x = Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
     const ghost = new Ghost(x, -baseSize * this.scale, type);
@@ -476,6 +503,9 @@ export class Game {
 
   private checkCollisions() {
     // Check projectile-ghost collisions
+    let bossGhostToExplode: Ghost | null = null;
+    let rainbowGhostsToExplode: Ghost[] = [];
+    
     this.projectiles = this.projectiles.filter(projectile => {
       let hit = false;
       this.ghosts = this.ghosts.filter(ghost => {
@@ -492,6 +522,8 @@ export class Game {
               points = 20; // Rainbow ghost destroyed
             } else if (ghost.type === 'special') {
               points = 50; // Original white ghost
+            } else if (ghost.type === 'boss') {
+              points = 100; // Boss ghost base points
             }
             
             this.score += points;
@@ -502,9 +534,11 @@ export class Game {
               this.lives++;
             }
             
-            // Area damage for rainbow ghost destruction
+            // Mark for area damage handling after the filter completes
             if (ghost.type === 'rainbow') {
-              this.handleRainbowGhostExplosion(ghost);
+              rainbowGhostsToExplode.push(ghost);
+            } else if (ghost.type === 'boss') {
+              bossGhostToExplode = ghost;
             }
           } else {
             // Ghost survived hit
@@ -528,6 +562,15 @@ export class Game {
       });
       return !hit;
     });
+    
+    // Handle area explosions after the main collision loop
+    rainbowGhostsToExplode.forEach(ghost => {
+      this.handleRainbowGhostExplosion(ghost);
+    });
+    
+    if (bossGhostToExplode) {
+      this.handleBossGhostExplosion(bossGhostToExplode);
+    }
   }
 
   private checkProjectileGhostCollision(projectile: Projectile, ghost: Ghost): boolean {
@@ -751,6 +794,36 @@ export class Game {
     });
   }
 
+  private handleBossGhostExplosion(bossGhost: Ghost) {
+    // Calculate massive blast radius (almost full screen)
+    const blastRadius = Math.max(this.width, this.height) * 0.8;
+    
+    // Create massive nuke visual effect
+    this.visualEffects.push(new NukeEffect(bossGhost.position, blastRadius));
+    
+    // Destroy all ghosts on screen (boss is already destroyed)
+    const ghostsDestroyed: Ghost[] = [];
+    
+    this.ghosts = this.ghosts.filter(ghost => {
+      // Create explosion effect for each destroyed ghost
+      this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
+      ghostsDestroyed.push(ghost);
+      return false; // Remove all ghosts
+    });
+    
+    const destroyedCount = ghostsDestroyed.length;
+    
+    // Massive points for chain destruction
+    this.score += destroyedCount * 20; // 20 per ghost destroyed by explosion
+    this.ghostsDestroyed += destroyedCount;
+    
+    // Check for life recovery
+    const livesGained = Math.floor(this.ghostsDestroyed / 100) - Math.floor((this.ghostsDestroyed - destroyedCount) / 100);
+    if (livesGained > 0) {
+      this.lives += livesGained;
+    }
+  }
+
   private drawControlsLegend() {
     // Draw controls on the right side
     const boxWidth = Math.round(this.isMobile ? 250 * this.scale : 190 * this.scale);
@@ -794,6 +867,7 @@ export class Game {
       { key: '← →', action: 'Move' },
       { key: 'SPACE', action: 'Shoot' },
       { key: 'N', action: 'Nuke' },
+      { key: 'B', action: 'Boss in 5s' },
       { key: 'ESC', action: 'Pause' },
       { key: 'H', action: 'Hide' }
     ];
