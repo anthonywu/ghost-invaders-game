@@ -1,6 +1,6 @@
 import { GameObject, Vector2D, RAINBOW_COLORS } from './types';
 
-export type GhostType = 'normal' | 'special' | 'rainbow';
+export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss';
 
 export class Ghost implements GameObject {
   position: Vector2D;
@@ -24,6 +24,17 @@ export class Ghost implements GameObject {
     this.type = type;
     
     switch (type) {
+      case 'boss':
+        // Pink boss ghost - 4x size, 5 hit points
+        this.width = 160;
+        this.height = 160;
+        this.originalWidth = 160;
+        this.originalHeight = 160;
+        this.color = '#FF69B4'; // Hot pink color
+        this.hitPoints = 5;
+        this.maxHitPoints = 5;
+        this.baseSpeed = 60; // Slower than regular ghosts
+        break;
       case 'rainbow':
         // Rainbow ghost - 3x size, 3 hit points
         this.width = 120;
@@ -79,7 +90,22 @@ export class Ghost implements GameObject {
     this.hitPoints--;
     
     if (this.hitPoints > 0) {
-      if (this.type === 'rainbow') {
+      if (this.type === 'boss') {
+        // Boss ghost shrinks with each hit
+        if (this.hitPoints === 4) {
+          this.width = 140;
+          this.height = 140;
+        } else if (this.hitPoints === 3) {
+          this.width = 120;
+          this.height = 120;
+        } else if (this.hitPoints === 2) {
+          this.width = 80;
+          this.height = 80;
+        } else if (this.hitPoints === 1) {
+          this.width = 40;
+          this.height = 40;
+        }
+      } else if (this.type === 'rainbow') {
         // Rainbow ghost shrinks but stays rainbow
         if (this.hitPoints === 2) {
           // Shrink to 2x size
@@ -162,10 +188,15 @@ export class Ghost implements GameObject {
     } else {
       ctx.fillStyle = this.color;
       
-      // Add glow effect for special ghost
+      // Add glow effect for special and boss ghosts
       if (this.type === 'special') {
         ctx.shadowColor = '#FFFFFF';
         ctx.shadowBlur = 20;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      } else if (this.type === 'boss') {
+        ctx.shadowColor = '#FF69B4';
+        ctx.shadowBlur = 30;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
       }
@@ -217,7 +248,7 @@ export class Ghost implements GameObject {
     ctx.fill();
     
     // Reset shadow for other elements
-    if (this.type === 'special' || this.isRainbow) {
+    if (this.type === 'special' || this.type === 'boss' || this.isRainbow) {
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
     }

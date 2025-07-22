@@ -30,6 +30,8 @@ export class Game {
   private specialGhostInterval: number = 30000; // 30 seconds
   private rainbowGhostTimer: number = 0;
   private rainbowGhostInterval: number = 120000; // 2 minutes
+  private bossGhostTimer: number = 0;
+  private bossGhostInterval: number = 90000; // 90 seconds
   
   private keys: Set<string> = new Set();
   
@@ -353,6 +355,13 @@ export class Game {
       this.rainbowGhostTimer = 0;
     }
     
+    // Spawn boss ghost every 90 seconds with two rainbow ghosts
+    this.bossGhostTimer += deltaTime * 1000;
+    if (this.bossGhostTimer >= this.bossGhostInterval) {
+      this.spawnBossWave();
+      this.bossGhostTimer = 0;
+    }
+    
     // Check collisions
     this.checkCollisions();
     
@@ -460,18 +469,30 @@ export class Game {
     });
   }
 
-  private spawnGhost(type: GhostType = 'normal') {
+  private spawnGhost(type: GhostType = 'normal', specificX?: number) {
     let baseSize = 40;
     if (type === 'special') baseSize = 80;
     if (type === 'rainbow') baseSize = 120;
+    if (type === 'boss') baseSize = 160;
     
-    const x = Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
+    const x = specificX !== undefined ? specificX : Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
     const ghost = new Ghost(x, -baseSize * this.scale, type);
     ghost.width *= this.scale;
     ghost.height *= this.scale;
     ghost.baseSpeed *= this.scale;
     ghost.evasionSpeed *= this.scale;
     this.ghosts.push(ghost);
+  }
+  
+  private spawnBossWave() {
+    // Spawn boss ghost in the center
+    const bossX = this.width / 2;
+    this.spawnGhost('boss', bossX);
+    
+    // Spawn rainbow ghosts on left and right
+    const spacing = 200 * this.scale; // Distance between boss and rainbow ghosts
+    this.spawnGhost('rainbow', bossX - spacing);
+    this.spawnGhost('rainbow', bossX + spacing);
   }
 
   private checkCollisions() {
@@ -488,7 +509,9 @@ export class Game {
             
             // Points based on ghost type
             let points = 10;
-            if (ghost.type === 'rainbow') {
+            if (ghost.type === 'boss') {
+              points = 100; // Boss ghost destroyed
+            } else if (ghost.type === 'rainbow') {
               points = 20; // Rainbow ghost destroyed
             } else if (ghost.type === 'special') {
               points = 50; // Original white ghost
@@ -514,7 +537,9 @@ export class Game {
             this.visualEffects.push(smallExplosion);
             
             // Points for hitting but not destroying
-            if (ghost.type === 'rainbow') {
+            if (ghost.type === 'boss') {
+              this.score += 50; // Boss ghost hit
+            } else if (ghost.type === 'rainbow') {
               this.score += 30; // Rainbow ghost hit
             } else {
               this.score += 25; // Special ghost hit
