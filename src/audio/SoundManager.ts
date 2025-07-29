@@ -8,8 +8,10 @@ export class SoundManager {
   private sounds: Map<string, AudioBuffer> = new Map();
   private masterGain: GainNode;
   private sfxGain: GainNode;
+  private musicGain: GainNode;
   private enabled: boolean = true;
   private loading: Promise<void>;
+  private backgroundMusic: HTMLAudioElement | null = null;
   
   // Sound file mappings
   private soundFiles = {
@@ -37,16 +39,22 @@ export class SoundManager {
     // Create gain nodes
     this.masterGain = this.audioContext.createGain();
     this.sfxGain = this.audioContext.createGain();
+    this.musicGain = this.audioContext.createGain();
     
     this.sfxGain.connect(this.masterGain);
+    this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.audioContext.destination);
     
     // Set default volumes
     this.masterGain.gain.value = 0.7;
     this.sfxGain.gain.value = 0.8;
+    this.musicGain.gain.value = 0.5;
     
     // Start loading sounds
     this.loading = this.loadSounds();
+    
+    // Initialize background music
+    this.initBackgroundMusic();
   }
   
   /**
@@ -57,6 +65,39 @@ export class SoundManager {
       await this.audioContext.resume();
     }
     await this.loading;
+    
+    // Start background music
+    this.playBackgroundMusic();
+  }
+  
+  /**
+   * Initialize background music
+   */
+  private initBackgroundMusic() {
+    this.backgroundMusic = new Audio('/sounds/background-vibe-1.mp3');
+    this.backgroundMusic.loop = true;
+    this.backgroundMusic.volume = this.musicGain.gain.value;
+  }
+  
+  /**
+   * Play background music
+   */
+  private playBackgroundMusic() {
+    if (this.backgroundMusic && this.enabled) {
+      this.backgroundMusic.play().catch(error => {
+        console.warn('Failed to play background music:', error);
+      });
+    }
+  }
+  
+  /**
+   * Stop background music
+   */
+  private stopBackgroundMusic() {
+    if (this.backgroundMusic) {
+      this.backgroundMusic.pause();
+      this.backgroundMusic.currentTime = 0;
+    }
   }
   
   /**
@@ -181,10 +222,19 @@ export class SoundManager {
   
   playGameOver() {
     this.playSound('gameOver', 0.6);
+    // Stop background music on game over
+    this.stopBackgroundMusic();
   }
   
   playPause() {
     this.playSound('pause', 0.3);
+  }
+  
+  /**
+   * Resume background music (e.g., when restarting game)
+   */
+  resumeBackgroundMusic() {
+    this.playBackgroundMusic();
   }
   
   /**
@@ -202,10 +252,27 @@ export class SoundManager {
   }
   
   /**
+   * Set music volume (0-1)
+   */
+  setMusicVolume(volume: number) {
+    this.musicGain.gain.value = Math.max(0, Math.min(1, volume));
+    if (this.backgroundMusic) {
+      this.backgroundMusic.volume = this.musicGain.gain.value;
+    }
+  }
+  
+  /**
    * Toggle sound on/off
    */
   toggleSound(): boolean {
     this.enabled = !this.enabled;
+    
+    if (this.enabled) {
+      this.playBackgroundMusic();
+    } else {
+      this.stopBackgroundMusic();
+    }
+    
     return this.enabled;
   }
   

@@ -124,6 +124,12 @@ export class Game {
         this.soundInitialized = true;
       }
       
+      // Check for restart
+      if (this.state === 'gameOver' && e.key === ' ') {
+        this.restart();
+        return;
+      }
+      
       this.keys.add(e.key);
       if (e.key === 'Escape') {
         this.togglePause();
@@ -187,6 +193,12 @@ export class Game {
       if (this.state === 'paused') {
         this.state = 'playing';
         this.soundManager.playPause();
+        return;
+      }
+      
+      // If game is over, restart on any touch
+      if (this.state === 'gameOver') {
+        this.restart();
         return;
       }
       
@@ -308,6 +320,36 @@ export class Game {
       this.state = 'playing';
     }
     this.soundManager.playPause();
+  }
+  
+  private restart() {
+    // Reset game state
+    this.state = 'playing';
+    this.score = 0;
+    this.lives = 3;
+    this.ghostsDestroyed = 0;
+    
+    // Clear entities
+    this.ghosts = [];
+    this.projectiles = [];
+    this.visualEffects = [];
+    
+    // Reset timers
+    this.lastShot = 0;
+    this.lastNuke = 0;
+    this.nukeReady = false;
+    this.ghostSpawnTimer = 0;
+    this.specialGhostTimer = 0;
+    this.rainbowGhostTimer = 0;
+    this.bossGhostTimer = 0;
+    this.lifeLostTime = 0;
+    
+    // Reset player position
+    this.player.position.x = this.width / 2;
+    this.player.position.y = this.height - 60 * this.scale;
+    
+    // Resume background music
+    this.soundManager.resumeBackgroundMusic();
   }
 
   start() {
@@ -839,7 +881,8 @@ export class Game {
       this.ctx.fillStyle = 'white';
       this.ctx.font = `${baseFontSize}px Arial`;
       this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40 * this.scale);
-      this.ctx.fillText('Refresh to play again', this.width / 2, this.height / 2 + 80 * this.scale);
+      const restartText = this.isMobile ? 'Tap to restart' : 'Press SPACE to restart';
+      this.ctx.fillText(restartText, this.width / 2, this.height / 2 + 80 * this.scale);
       this.ctx.textAlign = 'left';
     }
   }
