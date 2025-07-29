@@ -3,6 +3,7 @@ import { Ghost, GhostType } from './Ghost';
 import { Projectile } from './Projectile';
 import { GameState } from './types';
 import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffect';
+import { SoundManager } from './audio/SoundManager';
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -61,6 +62,10 @@ export class Game {
   
   // Parallax stars
   private starLayers: StarLayer[] = [];
+  
+  // Sound manager
+  private soundManager: SoundManager;
+  private soundInitialized: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -80,6 +85,9 @@ export class Game {
     
     // Initialize parallax star layers
     this.initializeStarLayers();
+    
+    // Initialize sound manager
+    this.soundManager = new SoundManager();
     
     this.setupEventListeners();
   }
@@ -109,7 +117,13 @@ export class Game {
   }
 
   private setupEventListeners() {
-    window.addEventListener('keydown', (e) => {
+    window.addEventListener('keydown', async (e) => {
+      // Initialize sound on first key press
+      if (!this.soundInitialized) {
+        await this.soundManager.init();
+        this.soundInitialized = true;
+      }
+      
       this.keys.add(e.key);
       if (e.key === 'Escape') {
         this.togglePause();
@@ -121,6 +135,11 @@ export class Game {
         // Trigger boss spawn in 5 seconds
         this.forceBossSpawn = true;
         this.forceBossSpawnTimer = 5000; // 5 seconds
+      }
+      if (e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 's') {
+        // Toggle mute with M or S
+        const enabled = this.soundManager.toggleSound();
+        console.log(`Sound ${enabled ? 'enabled' : 'muted'}`);
       }
     });
     
@@ -137,12 +156,40 @@ export class Game {
     if (this.isMobile) {
       this.setupMobileControls();
     }
+    
+    // Auto-pause when browser loses focus
+    window.addEventListener('blur', () => {
+      if (this.state === 'playing') {
+        this.state = 'paused';
+      }
+    });
+    
+    // Optional: Resume when browser gains focus (can be removed if you prefer manual resume)
+    // window.addEventListener('focus', () => {
+    //   if (this.state === 'paused') {
+    //     this.state = 'playing';
+    //   }
+    // });
   }
 
   private setupMobileControls() {
     // Touch start - record position and shoot
-    this.canvas.addEventListener('touchstart', (e) => {
+    this.canvas.addEventListener('touchstart', async (e) => {
       e.preventDefault();
+      
+      // Initialize sound on first touch
+      if (!this.soundInitialized) {
+        await this.soundManager.init();
+        this.soundInitialized = true;
+      }
+      
+      // If game is paused, unpause on any touch
+      if (this.state === 'paused') {
+        this.state = 'playing';
+        this.soundManager.playPause();
+        return;
+      }
+      
       const touch = e.touches[0];
       this.touchStartX = touch.clientX;
       
@@ -260,6 +307,7 @@ export class Game {
     } else if (this.state === 'paused') {
       this.state = 'playing';
     }
+    this.soundManager.playPause();
   }
 
   start() {
@@ -286,7 +334,10 @@ export class Game {
     
     // Update nuke availability
     if (currentTime - this.lastNuke >= this.nukeCooldown) {
-      this.nukeReady = true;
+      if (!this.nukeReady) {
+        this.nukeReady = true;
+        this.soundManager.playNukeReady();
+      }
     }
     
     // Handle player input
@@ -388,8 +439,10 @@ export class Game {
         // Ghost escaped - lose a life
         this.lives--;
         this.lifeLostTime = performance.now();
+        this.soundManager.playLifeLost();
         if (this.lives <= 0) {
           this.state = 'gameOver';
+          this.soundManager.playGameOver();
         }
         return false;
       }
@@ -398,8 +451,10 @@ export class Game {
         // Ghost hit player - lose a life
         this.lives--;
         this.lifeLostTime = performance.now();
+        this.soundManager.playLifeLost();
         if (this.lives <= 0) {
           this.state = 'gameOver';
+          this.soundManager.playGameOver();
         }
         return false;
       }
@@ -453,6 +508,9 @@ export class Game {
     projectile.height *= this.scale;
     projectile.speed *= this.scale;
     this.projectiles.push(projectile);
+    
+    // Play shoot sound
+    this.soundManager.playShoot();
   }
 
   private fireNuke() {
@@ -461,6 +519,9 @@ export class Game {
     
     // Create nuke visual effect
     this.visualEffects.push(new NukeEffect(this.player.position, blastRadius));
+    
+    // Play nuke sound
+    this.soundManager.playNukeFire();
     
     // Remove all ghosts within blast radius
     this.ghosts = this.ghosts.filter(ghost => {
@@ -499,6 +560,9 @@ export class Game {
     ghost.baseSpeed *= this.scale;
     ghost.evasionSpeed *= this.scale;
     this.ghosts.push(ghost);
+    
+    // Play spawn sound
+    this.soundManager.playGhostSpawn(type, x, this.width);
   }
 
   private checkCollisions() {
@@ -516,6 +580,9 @@ export class Game {
             // Create explosion effect for destroyed ghost
             this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color));
             
+            // Play destroyed sound
+            this.soundManager.playGhostDestroyed(ghost.type);
+            
             // Points based on ghost type
             let points = 10;
             if (ghost.type === 'rainbow') {
@@ -532,6 +599,7 @@ export class Game {
             // Check for life recovery every 100 ghosts
             if (this.ghostsDestroyed % 100 === 0) {
               this.lives++;
+              this.soundManager.playExtraLife();
             }
             
             // Mark for area damage handling after the filter completes
@@ -546,6 +614,9 @@ export class Game {
             const smallExplosion = new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color);
             smallExplosion.duration = 0.3; // Shorter duration
             this.visualEffects.push(smallExplosion);
+            
+            // Play hit sound
+            this.soundManager.playGhostHit();
             
             // Points for hitting but not destroying
             if (ghost.type === 'rainbow') {
@@ -735,6 +806,14 @@ export class Game {
       this.ctx.fillStyle = '#888888';
       this.ctx.fillText(`Nuke in: ${secondsRemaining}s`, this.width / 2, padding * 4);
     }
+    
+    // Sound indicator
+    this.ctx.font = `${smallFontSize}px Arial`;
+    const soundEnabled = this.soundManager.isSoundEnabled();
+    this.ctx.fillStyle = soundEnabled ? '#88FF88' : '#FF8888';
+    this.ctx.fillText(soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF', this.width / 2, padding * 6);
+    this.ctx.font = `${baseFontSize}px Arial`;
+    
     this.ctx.textAlign = 'left';
     
     // Controls legend
@@ -749,7 +828,8 @@ export class Game {
       this.ctx.textAlign = 'center';
       this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
       this.ctx.font = `${baseFontSize}px Arial`;
-      this.ctx.fillText('Press ESC to resume', this.width / 2, this.height / 2 + 40 * this.scale);
+      const resumeText = this.isMobile ? 'Tap to resume' : 'Press ESC to resume';
+      this.ctx.fillText(resumeText, this.width / 2, this.height / 2 + 40 * this.scale);
       this.ctx.textAlign = 'left';
     } else if (this.state === 'gameOver') {
       this.ctx.fillStyle = 'red';
@@ -827,7 +907,7 @@ export class Game {
   private drawControlsLegend() {
     // Draw controls on the right side
     const boxWidth = Math.round(this.isMobile ? 250 * this.scale : 190 * this.scale);
-    const boxHeight = Math.round(this.isMobile ? 200 * this.scale : 170 * this.scale);
+    const boxHeight = Math.round(this.isMobile ? 200 * this.scale : 200 * this.scale);
     const x = this.width - boxWidth - Math.round(10 * this.scale);
     const startY = Math.round(40 * this.scale);
     const lineHeight = Math.round(this.isMobile ? 40 * this.scale : 30 * this.scale);
@@ -869,7 +949,8 @@ export class Game {
       { key: 'N', action: 'Nuke' },
       { key: 'B', action: 'Boss in 5s' },
       { key: 'ESC', action: 'Pause' },
-      { key: 'H', action: 'Hide' }
+      { key: 'H', action: 'Hide' },
+      { key: 'S', action: 'Sound' }
     ];
     
     controls.forEach((control, index) => {
