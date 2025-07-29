@@ -61,10 +61,35 @@ bun run preview
 
 ## Development
 
-Vibe coded:
+Vibe coded with a very tight leash.
 
-- TypeScript
-- Vite
-- HTML5 Canvas
+### Tech Stack
+
+**Core Technologies:**
+- **TypeScript** - Type-safe JavaScript for robust game logic
+- **Vite** - Lightning-fast build tool and dev server
+- **HTML5 Canvas API** - Hardware-accelerated 2D graphics rendering
+
+**Game Architecture:**
+- **Object-Oriented Design** - Modular classes for Player, Ghost, Projectile, and Game entities
+- **Game Loop Pattern** - 60 FPS update/render cycle using `requestAnimationFrame`
+- **Entity-Component System** - Composable visual effects and behaviors
+
+**Audio System:**
+- **Web Audio API** - Dynamic sound effect generation and spatial audio
+- **HTML5 Audio** - Background music playback with seamless looping
+- **Procedural Audio** - Custom-generated retro sound effects using oscillators
+
+**Graphics & Effects:**
+- **Particle Systems** - Explosion and visual effect animations
+- **Parallax Scrolling** - Multi-layer star field for depth
+- **Sprite Animation** - Frame-based ghost animations
+- **Dynamic Scaling** - Responsive design for all screen sizes
+
+**Modern Web Features:**
+- **ES Modules** - Clean dependency management
+- **Async/Await** - Smooth resource loading
+- **Touch Events** - Full mobile/tablet support
+- **Performance API** - Precise timing and optimization
 
 See `SPEC.md` for detailed technical specifications.
