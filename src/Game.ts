@@ -142,8 +142,11 @@ export class Game {
         this.forceBossSpawn = true;
         this.forceBossSpawnTimer = 5000; // 5 seconds
       }
-      if (e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 's') {
-        // Toggle mute with M or S
+      if (e.key.toLowerCase() === 'm') {
+        this.soundManager.cycleBackgroundMusic();
+      }
+      if (e.key.toLowerCase() === 's') {
+        // Toggle mute with S
         const enabled = this.soundManager.toggleSound();
         console.log(`Sound ${enabled ? 'enabled' : 'muted'}`);
       }
@@ -993,7 +996,8 @@ export class Game {
       { key: 'B', action: 'Boss in 5s' },
       { key: 'ESC', action: 'Pause' },
       { key: 'H', action: 'Hide' },
-      { key: 'S', action: 'Sound' }
+      { key: 'S', action: 'Mute' },
+      { key: 'M', action: 'Music' }
     ];
     
     controls.forEach((control, index) => {

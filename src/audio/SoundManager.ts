@@ -12,6 +12,11 @@ export class SoundManager {
   private enabled: boolean = true;
   private loading: Promise<void>;
   private backgroundMusic: HTMLAudioElement | null = null;
+  private backgroundTracks: string[] = [
+    '/sounds/background-vibe-1.mp3',
+    '/sounds/background-vibe-2.mp3'
+  ];
+  private currentTrackIndex: number = Math.floor(Math.random() * this.backgroundTracks.length);
   
   // Sound file mappings
   private soundFiles = {
@@ -74,7 +79,9 @@ export class SoundManager {
    * Initialize background music
    */
   private initBackgroundMusic() {
-    this.backgroundMusic = new Audio('/sounds/background-vibe-1.mp3');
+    if (this.backgroundTracks.length === 0) return;
+
+    this.backgroundMusic = new Audio(this.backgroundTracks[this.currentTrackIndex]);
     this.backgroundMusic.loop = true;
     this.backgroundMusic.volume = this.musicGain.gain.value;
   }
@@ -88,6 +95,18 @@ export class SoundManager {
         console.warn('Failed to play background music:', error);
       });
     }
+  }
+
+  /**
+   * Cycle to the next background music track
+   */
+  cycleBackgroundMusic() {
+    if (this.backgroundTracks.length < 2) return;
+
+    this.stopBackgroundMusic();
+    this.currentTrackIndex = (this.currentTrackIndex + 1) % this.backgroundTracks.length;
+    this.backgroundMusic!.src = this.backgroundTracks[this.currentTrackIndex];
+    this.playBackgroundMusic();
   }
   
   /**
