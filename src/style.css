@@ -1,3 +1,10 @@
+@font-face {
+    font-family: 'Oxanium';
+    src: url('/fonts/oxanium.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -7,7 +14,7 @@ body {
     align-items: center;
     min-height: 100vh;
     background-color: #000;
-    font-family: "Courier New", Courier, monospace;
+    font-family: 'Oxanium', sans-serif;
     overflow: hidden;
     background-image:
         linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
@@ -41,8 +48,8 @@ canvas#gameCanvas {
     -webkit-user-select: none;
     user-select: none;
     box-shadow:
-        0 0 20px rgba(0, 255, 255, 0.5),
-        inset 0 0 20px rgba(0, 255, 255, 0.1);
+        0 0 40px rgba(0, 255, 255, 0.5),
+        inset 0 0 40px rgba(0, 255, 255, 0.1);
 }
 footer {
     color: #ccc;

@@ -808,7 +808,7 @@ export class Game {
     const padding = Math.round(20 * this.scale);
     
     this.ctx.fillStyle = 'white';
-    this.ctx.font = `${baseFontSize}px Arial`;
+    this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     this.ctx.fillText(`Score: ${this.score}`, padding, padding * 2);
     
     // Lives indicator with blinking effect
@@ -831,12 +831,12 @@ export class Game {
     // Ghosts destroyed counter and progress to next life
     const ghostsToNextLife = 100 - (this.ghostsDestroyed % 100);
     this.ctx.fillStyle = '#88FF88';
-    this.ctx.font = `${smallFontSize}px Arial`;
+    this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
     this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, padding, padding * 5);
     
     // Reset font for other UI elements
     this.ctx.fillStyle = 'white';
-    this.ctx.font = `${baseFontSize}px Arial`;
+    this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     
     // Nuke indicator
     this.ctx.textAlign = 'center';
@@ -853,11 +853,11 @@ export class Game {
     }
     
     // Sound indicator
-    this.ctx.font = `${smallFontSize}px Arial`;
+    this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
     const soundEnabled = this.soundManager.isSoundEnabled();
     this.ctx.fillStyle = soundEnabled ? '#88FF88' : '#FF8888';
     this.ctx.fillText(soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF', this.width / 2, padding * 6);
-    this.ctx.font = `${baseFontSize}px Arial`;
+    this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     
     this.ctx.textAlign = 'left';
     
@@ -869,20 +869,20 @@ export class Game {
     // Game state messages
     if (this.state === 'paused') {
       this.ctx.fillStyle = 'white';
-      this.ctx.font = `${Math.round(48 * this.scale)}px Arial`;
+      this.ctx.font = `${Math.round(48 * this.scale)}px 'Oxanium', sans-serif`;
       this.ctx.textAlign = 'center';
       this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
-      this.ctx.font = `${baseFontSize}px Arial`;
+      this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
       const resumeText = this.isMobile ? 'Tap to resume' : 'Press ESC to resume';
       this.ctx.fillText(resumeText, this.width / 2, this.height / 2 + 40 * this.scale);
       this.ctx.textAlign = 'left';
     } else if (this.state === 'gameOver') {
       this.ctx.fillStyle = 'red';
-      this.ctx.font = `${Math.round(48 * this.scale)}px Arial`;
+      this.ctx.font = `${Math.round(48 * this.scale)}px 'Oxanium', sans-serif`;
       this.ctx.textAlign = 'center';
       this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2);
       this.ctx.fillStyle = 'white';
-      this.ctx.font = `${baseFontSize}px Arial`;
+      this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
       this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40 * this.scale);
       const restartText = this.isMobile ? 'Tap to restart' : 'Press SPACE to restart';
       this.ctx.fillText(restartText, this.width / 2, this.height / 2 + 80 * this.scale);
@@ -977,12 +977,12 @@ export class Game {
     
     // Title
     this.ctx.fillStyle = '#FFD700';
-    this.ctx.font = `bold ${Math.round(this.isMobile ? 28 * this.scale : 20 * this.scale)}px Arial`;
+    this.ctx.font = `bold ${Math.round(this.isMobile ? 28 * this.scale : 20 * this.scale)}px 'Oxanium', sans-serif`;
     this.ctx.fillText('CONTROLS', x, startY);
     
     // Control items
     this.ctx.fillStyle = 'white';
-    this.ctx.font = `${Math.round(this.isMobile ? 22 * this.scale : 16 * this.scale)}px Arial`;
+    this.ctx.font = `${Math.round(this.isMobile ? 22 * this.scale : 16 * this.scale)}px 'Oxanium', sans-serif`;
     
     const controls = this.isMobile ? [
       { key: 'SWIPE ←→', action: 'Move' },
@@ -994,10 +994,10 @@ export class Game {
       { key: 'SPACE', action: 'Shoot' },
       { key: 'N', action: 'Nuke' },
       { key: 'B', action: 'Boss in 5s' },
-      { key: 'ESC', action: 'Pause' },
-      { key: 'H', action: 'Hide' },
-      { key: 'S', action: 'Mute' },
-      { key: 'M', action: 'Music' }
+      { key: 'ESC', action: 'Pause Game' },
+      { key: 'S', action: 'Mute Sounds' },
+      { key: 'M', action: 'Music Change' },
+      { key: 'H', action: 'Hide Help' }
     ];
     
     controls.forEach((control, index) => {
@@ -1005,12 +1005,12 @@ export class Game {
       
       // Key
       this.ctx.fillStyle = '#88CCFF';
-      this.ctx.font = `bold ${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px monospace`;
+      this.ctx.font = `bold ${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px 'Oxanium', sans-serif`;
       this.ctx.fillText(control.key, x, y);
       
       // Action
       this.ctx.fillStyle = 'white';
-      this.ctx.font = `${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px Arial`;
+      this.ctx.font = `${Math.round(this.isMobile ? 20 * this.scale : 14 * this.scale)}px 'Oxanium', sans-serif`;
       this.ctx.fillText(control.action, x + Math.round(this.isMobile ? 120 * this.scale : 60 * this.scale), y);
     });
     
