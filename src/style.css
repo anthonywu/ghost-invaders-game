@@ -1,0 +1,65 @@
+body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #000;
+    font-family: "Courier New", Courier, monospace;
+    overflow: hidden;
+    background-image:
+        linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: grid-move 2s linear infinite;
+}
+
+@keyframes grid-move {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 0px 50px;
+    }
+}
+#app {
+    text-align: center;
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+canvas#gameCanvas {
+    border: 2px solid #0ff;
+    max-width: 100%;
+    max-height: calc(100vh - 100px);
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    box-shadow:
+        0 0 20px rgba(0, 255, 255, 0.5),
+        inset 0 0 20px rgba(0, 255, 255, 0.1);
+}
+footer {
+    color: #ccc;
+    font-size: 12px;
+    padding: 10px;
+    text-align: center;
+    border-top: 1px solid rgba(0, 255, 255, 0.3);
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+footer a {
+    color: #0ff;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+footer a:hover {
+    color: #fff;
+}
