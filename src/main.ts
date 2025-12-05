@@ -21,5 +21,35 @@ game.setStateChangeCallback((state: GameState, data?: { score?: number }) => {
   }
 });
 
+// Add click/touch handlers to tap targets for iOS compatibility
+const splashTapTarget = splashOverlay.querySelector('.tap-target') as HTMLElement;
+const gameOverTapTarget = gameOverOverlay.querySelector('.tap-target') as HTMLElement;
+
+if (splashTapTarget) {
+  splashTapTarget.addEventListener('click', () => {
+    game.startFromMenu();
+  });
+  splashTapTarget.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    game.startFromMenu();
+  });
+}
+
+if (gameOverTapTarget) {
+  gameOverTapTarget.addEventListener('click', () => {
+    game.restart();
+    // Manually trigger state change to playing
+    splashOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+  });
+  gameOverTapTarget.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    game.restart();
+    // Manually trigger state change to playing
+    splashOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+  });
+}
+
 // Start the game loop (begins in menu state)
 game.start();

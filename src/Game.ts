@@ -340,18 +340,18 @@ export class Game {
     this.soundManager.playPause();
   }
   
-  private restart() {
+  restart() {
     // Reset game state
     this.state = 'playing';
     this.score = 0;
     this.lives = 3;
     this.ghostsDestroyed = 0;
-    
+
     // Clear entities
     this.ghosts = [];
     this.projectiles = [];
     this.visualEffects = [];
-    
+
     // Reset timers
     this.lastShot = 0;
     this.lastNuke = 0;
@@ -361,11 +361,11 @@ export class Game {
     this.rainbowGhostTimer = 0;
     this.bossGhostTimer = 0;
     this.lifeLostTime = 0;
-    
+
     // Reset player position
     this.player.position.x = this.width / 2;
     this.player.position.y = this.height - 60 * this.scale;
-    
+
     // Resume background music
     this.soundManager.resumeBackgroundMusic();
   }
