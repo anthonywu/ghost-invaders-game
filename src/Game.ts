@@ -17,7 +17,8 @@ export class Game {
   private projectiles: Projectile[] = [];
   private visualEffects: VisualEffect[] = [];
   
-  private state: GameState = 'playing';
+  private state: GameState = 'menu';
+  private onStateChange?: (state: GameState, data?: { score?: number }) => void;
   private score: number = 0;
   private lives: number = 3;
   private ghostsDestroyed: number = 0;
@@ -123,10 +124,17 @@ export class Game {
         await this.soundManager.init();
         this.soundInitialized = true;
       }
-      
+
+      // Start from menu
+      if (this.state === 'menu' && e.key === ' ') {
+        this.startFromMenu();
+        return;
+      }
+
       // Check for restart
       if (this.state === 'gameOver' && e.key === ' ') {
         this.restart();
+        this.onStateChange?.('playing');
         return;
       }
       
@@ -185,23 +193,30 @@ export class Game {
     // Touch start - record position and shoot
     this.canvas.addEventListener('touchstart', async (e) => {
       e.preventDefault();
-      
+
       // Initialize sound on first touch
       if (!this.soundInitialized) {
         await this.soundManager.init();
         this.soundInitialized = true;
       }
-      
+
+      // Start from menu on tap
+      if (this.state === 'menu') {
+        this.startFromMenu();
+        return;
+      }
+
       // If game is paused, unpause on any touch
       if (this.state === 'paused') {
         this.state = 'playing';
         this.soundManager.playPause();
         return;
       }
-      
+
       // If game is over, restart on any touch
       if (this.state === 'gameOver') {
         this.restart();
+        this.onStateChange?.('playing');
         return;
       }
       
@@ -355,6 +370,17 @@ export class Game {
     this.soundManager.resumeBackgroundMusic();
   }
 
+  setStateChangeCallback(callback: (state: GameState, data?: { score?: number }) => void) {
+    this.onStateChange = callback;
+  }
+
+  startFromMenu() {
+    if (this.state === 'menu') {
+      this.state = 'playing';
+      this.onStateChange?.('playing');
+    }
+  }
+
   start() {
     this.lastTime = performance.now();
     this.gameLoop();
@@ -488,10 +514,11 @@ export class Game {
         if (this.lives <= 0) {
           this.state = 'gameOver';
           this.soundManager.playGameOver();
+          this.onStateChange?.('gameOver', { score: this.score });
         }
         return false;
       }
-      
+
       if (this.checkGhostPlayerCollision(ghost)) {
         // Ghost hit player - lose a life
         this.lives--;
@@ -500,10 +527,11 @@ export class Game {
         if (this.lives <= 0) {
           this.state = 'gameOver';
           this.soundManager.playGameOver();
+          this.onStateChange?.('gameOver', { score: this.score });
         }
         return false;
       }
-      
+
       return true;
     });
   }
@@ -708,10 +736,15 @@ export class Game {
     // Clear canvas
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, this.width, this.height);
-    
+
     // Draw stars
     this.drawStars();
-    
+
+    // Menu state - just show animated background, overlay handles the rest
+    if (this.state === 'menu') {
+      return;
+    }
+
     // Draw game objects
     if (this.state !== 'gameOver') {
       this.player.render(this.ctx);
@@ -719,7 +752,7 @@ export class Game {
       this.projectiles.forEach(projectile => projectile.render(this.ctx));
       this.visualEffects.forEach(effect => effect.render(this.ctx));
     }
-    
+
     // Draw UI
     this.drawUI();
   }
@@ -876,18 +909,8 @@ export class Game {
       const resumeText = this.isMobile ? 'Tap to resume' : 'Press ESC to resume';
       this.ctx.fillText(resumeText, this.width / 2, this.height / 2 + 40 * this.scale);
       this.ctx.textAlign = 'left';
-    } else if (this.state === 'gameOver') {
-      this.ctx.fillStyle = 'red';
-      this.ctx.font = `${Math.round(48 * this.scale)}px 'Oxanium', sans-serif`;
-      this.ctx.textAlign = 'center';
-      this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2);
-      this.ctx.fillStyle = 'white';
-      this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
-      this.ctx.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 40 * this.scale);
-      const restartText = this.isMobile ? 'Tap to restart' : 'Press SPACE to restart';
-      this.ctx.fillText(restartText, this.width / 2, this.height / 2 + 80 * this.scale);
-      this.ctx.textAlign = 'left';
     }
+    // Game over UI handled by HTML overlay
   }
 
   private handleRainbowGhostExplosion(rainbowGhost: Ghost) {

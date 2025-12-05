@@ -8,6 +8,29 @@
         <link rel="stylesheet" href="/src/style.css" />
     </head>
     <body>
+        <!-- Side decorations (desktop only) -->
+        <div class="side-decoration left">
+            <img src="/images/graphic01.png" alt="" />
+        </div>
+        <div class="side-decoration right">
+            <img src="/images/graphic05.png" alt="" />
+        </div>
+
+        <!-- Title splash overlay -->
+        <div id="splashOverlay" class="overlay">
+            <img src="/images/graphic03.png" alt="Ghost Invaders" class="splash-image" />
+            <div class="start-prompt">Press SPACE or Tap to Start</div>
+        </div>
+
+        <!-- Game over overlay -->
+        <div id="gameOverOverlay" class="overlay hidden">
+            <img src="/images/graphic04.png" alt="Game Over" class="gameover-image" />
+            <div class="gameover-stats">
+                <div class="final-score">Score: <span id="finalScore">0</span></div>
+                <div class="restart-prompt">Press SPACE or Tap to Play Again</div>
+            </div>
+        </div>
+
         <div id="app">
             <canvas id="gameCanvas"></canvas>
         </div>

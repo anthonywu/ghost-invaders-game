@@ -70,3 +70,115 @@ footer a {
 footer a:hover {
     color: #fff;
 }
+
+/* Side decorations - scale with viewport, centered in side margins */
+.side-decoration {
+    position: fixed;
+    top: 50%;
+    /* Scale width based on available side space: (100vw - canvas ~700px) / 2 - padding */
+    width: clamp(0px, calc((100vw - 700px) / 2 - 20px), 330px);
+    opacity: 1;
+    pointer-events: none;
+    z-index: 0;
+    transition: width 0.3s ease, opacity 0.3s ease;
+}
+.side-decoration.left {
+    /* Center in left margin: position at 25% of viewport (center of left half minus canvas) */
+    left: calc((100vw - 700px) / 4);
+    transform: translate(-50%, -50%);
+}
+.side-decoration.right {
+    /* Center in right margin: position at 25% from right edge */
+    right: calc((100vw - 700px) / 4);
+    transform: translate(50%, -50%);
+}
+.side-decoration img {
+    width: 100%;
+    height: auto;
+    max-height: 80vh;
+    object-fit: contain;
+    border: 2px solid #0ff;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+/* Hide when too narrow (width approaches 0) */
+@media (max-width: 900px) {
+    .side-decoration {
+        opacity: 0;
+        pointer-events: none;
+    }
+}
+
+/* Overlays */
+.overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.overlay.fade-out {
+    opacity: 0;
+}
+
+/* Splash screen */
+.splash-image {
+    max-width: 90vw;
+    max-height: 50vh;
+    object-fit: contain;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+.start-prompt {
+    margin-top: 30px;
+    font-family: 'Oxanium', sans-serif;
+    font-size: 24px;
+    color: #0ff;
+    text-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+    animation: blink 1.2s ease-in-out infinite;
+}
+
+/* Game over screen */
+.gameover-image {
+    max-width: 90vw;
+    max-height: 40vh;
+    object-fit: contain;
+}
+.gameover-stats {
+    margin-top: 20px;
+    text-align: center;
+    font-family: 'Oxanium', sans-serif;
+}
+.final-score {
+    font-size: 36px;
+    color: #ff4444;
+    text-shadow: 0 0 20px #ff0000;
+    margin-bottom: 15px;
+}
+.restart-prompt {
+    font-size: 20px;
+    color: #0ff;
+    text-shadow: 0 0 15px #0ff;
+    animation: blink 1.2s ease-in-out infinite;
+}
+
+/* Animations */
+@keyframes pulse-glow {
+    0%, 100% {
+        filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.5));
+    }
+    50% {
+        filter: drop-shadow(0 0 40px rgba(0, 255, 255, 0.8));
+    }
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
