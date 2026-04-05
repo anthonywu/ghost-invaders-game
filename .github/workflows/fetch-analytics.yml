@@ -1,0 +1,43 @@
+name: Fetch Cloudflare Analytics
+
+on:
+  schedule:
+    # Run daily at 1 AM UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-analytics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install csv-stringify
+
+      - name: Fetch Cloudflare Analytics
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun scripts/fetch-cf-analytics.js
+
+      # TODO: Enable once Analytics Engine GraphQL schema is accessible
+      # - name: Fetch Cloudflare Logs Analytics
+      #   env:
+      #     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      #   run: bun scripts/fetch-cf-logs-analytics.js
+
+      - name: Commit & push
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add analytics/
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update analytics [skip ci]"
+          git push

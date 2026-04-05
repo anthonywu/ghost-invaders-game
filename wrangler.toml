@@ -12,3 +12,6 @@ routes = [
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"

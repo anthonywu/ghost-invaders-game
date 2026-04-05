@@ -2,9 +2,11 @@
 
 A fun, kid-friendly Space Invaders game featuring colorful Pac-Man style ghosts!
 
-Free Play at: http://ghost-invaders.anthony-wu.com
+Free Play at: https://ghost-invaders.com/
 
 No logins, no ads, Wi-Fi not required.
+
+**Privacy Note:** We collect aggregate country-level visitor data (no personal data, no IP logging).
 
 # Development
 
