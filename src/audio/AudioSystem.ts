@@ -106,7 +106,7 @@ export class AudioSystem {
   /**
    * Ghost spawn - ethereal whoosh with formant "hahhh"
    */
-  playGhostSpawn(ghostType: 'normal' | 'special' | 'rainbow' | 'boss', x: number, canvasWidth: number) {
+  playGhostSpawn(ghostType: 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined', x: number, canvasWidth: number) {
     const now = this.audioContext.currentTime;
     const panner = this.audioContext.createStereoPanner();
     panner.connect(this.sfxGain);
@@ -127,6 +127,9 @@ export class AudioSystem {
         break;
       case 'boss':
         this.playBossGhostSpawn(panner, now);
+        break;
+      case 'outlined':
+        this.playNormalGhostSpawn(panner, now);
         break;
     }
   }
@@ -285,7 +288,7 @@ export class AudioSystem {
   /**
    * Ghost hit but not destroyed
    */
-  playGhostHit(ghostType: 'normal' | 'special' | 'rainbow' | 'boss') {
+  playGhostHit(ghostType: 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined') {
     const now = this.audioContext.currentTime;
     
     // Impact thud
@@ -308,7 +311,8 @@ export class AudioSystem {
       normal: 130.81, // C3
       special: 164.81, // E3
       rainbow: 196.00, // G3
-      boss: 49.00 // G1
+      boss: 49.00, // G1
+      outlined: 146.83 // D3
     };
     
     voiceOsc.frequency.value = pitchMap[ghostType];
@@ -328,7 +332,7 @@ export class AudioSystem {
   /**
    * Ghost destroyed
    */
-  playGhostDestroyed(ghostType: 'normal' | 'special' | 'rainbow' | 'boss') {
+  playGhostDestroyed(ghostType: 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined') {
     const now = this.audioContext.currentTime;
     
     // Initial pop
@@ -352,7 +356,8 @@ export class AudioSystem {
       normal: { start: 523.25, end: 130.81 }, // C4 to C2
       special: { start: 659.25, end: 164.81 }, // E4 to E2
       rainbow: { start: 783.99, end: 196.00 }, // G4 to G2
-      boss: { start: 261.63, end: 32.70 } // C3 to C0
+      boss: { start: 261.63, end: 32.70 }, // C3 to C0
+      outlined: { start: 587.33, end: 146.83 } // D5 to D3
     };
     
     const sweep = sweepMap[ghostType];

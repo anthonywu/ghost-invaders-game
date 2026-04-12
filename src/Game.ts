@@ -2,7 +2,7 @@ import { Player } from './Player';
 import { Ghost, GhostType } from './Ghost';
 import { Projectile } from './Projectile';
 import { GameState } from './types';
-import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffect';
+import { VisualEffect, NukeEffect, ExplosionEffect, HurricaneSliceEffect, GhostChopEffect } from './effects/VisualEffect';
 import { SoundManager } from './audio/SoundManager';
 
 export class Game {
@@ -21,6 +21,7 @@ export class Game {
   private onStateChange?: (state: GameState, data?: { score?: number }) => void;
   private score: number = 0;
   private lives: number = 3;
+  private ammo: bigint = 1_000_000_000_000_000_000_000_000_000n; // 1 octillion
   private ghostsDestroyed: number = 0;
   private lastTime: number = 0;
   private lastShot: number = 0;
@@ -32,12 +33,26 @@ export class Game {
   private specialGhostInterval: number = 30000; // 30 seconds
   private rainbowGhostTimer: number = 0;
   private rainbowGhostInterval: number = 120000; // 2 minutes
+  private outlinedGhostTimer: number = 0;
+  private outlinedGhostInterval: number = 120000; // 2 minutes (testing default)
+  private outlinedGhostPauseTimer: number = 0;
+  private outlinedGhostPauseDuration: number = 20000; // 20 seconds
+  private pendingHurricaneGhost: Ghost | null = null;
+  private pendingHurricaneGhostLastY: number = 0;
   private bossGhostTimer: number = 0;
   private bossGhostInterval: number = 180000; // 3 minutes
+  private bossWarningThreshold: number = 5000; // 5 seconds
+  private nextBossSpawnX: number | null = null;
   private forceBossSpawn: boolean = false;
   private forceBossSpawnTimer: number = 0;
   
   private keys: Set<string> = new Set();
+  private speechInputActive: boolean = false;
+  private speechDraft: string = '';
+  private speechText: string = '';
+  private speechBubbleTimer: number = 0;
+  private ghostTalkTimer: number = 0;
+  private ghostTalkInterval: number = 4500;
   
   // Nuke power-up
   private lastNuke: number = 0;
@@ -89,6 +104,8 @@ export class Game {
     
     // Initialize sound manager
     this.soundManager = new SoundManager();
+    const isTesting = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    this.outlinedGhostInterval = isTesting ? 120000 : 300000; // 2 min testing, 5 min gaming
     
     this.setupEventListeners();
   }
@@ -119,6 +136,24 @@ export class Game {
 
   private setupEventListeners() {
     window.addEventListener('keydown', async (e) => {
+      if (this.speechInputActive) {
+        e.preventDefault();
+        if (e.key === 'Escape') {
+          this.speechText = this.speechDraft.replace(/\s+/g, ' ').trim().slice(0, 80);
+          this.speechBubbleTimer = 10000;
+          this.speechInputActive = false;
+          this.speechDraft = '';
+          this.state = 'playing';
+        } else if (e.key === 'Backspace') {
+          this.speechDraft = this.speechDraft.slice(0, -1);
+        } else if (e.key === 'Enter') {
+          this.speechDraft += ' ';
+        } else if (e.key.length === 1 && this.speechDraft.length < 80) {
+          this.speechDraft += e.key;
+        }
+        return;
+      }
+
       // Initialize sound on first key press
       if (!this.soundInitialized) {
         await this.soundManager.init();
@@ -145,16 +180,28 @@ export class Game {
       if (e.key.toLowerCase() === 'h') {
         this.showControls = !this.showControls;
       }
+      if (e.key.toLowerCase() === 'e' && this.state === 'playing') {
+        this.state = 'gameOver';
+        this.soundManager.playGameOver();
+        this.onStateChange?.('gameOver', { score: this.score });
+        return;
+      }
       if (e.key.toLowerCase() === 'b') {
         // Trigger boss spawn in 5 seconds
         this.forceBossSpawn = true;
         this.forceBossSpawnTimer = 5000; // 5 seconds
+        this.nextBossSpawnX = this.nextBossSpawnX ?? this.getRandomGhostSpawnX(160);
       }
       if (e.key.toLowerCase() === 'm') {
         this.soundManager.cycleBackgroundMusic();
       }
-      if (e.key.toLowerCase() === 's') {
-        // Toggle mute with S
+      if (e.key.toLowerCase() === 's' && this.state === 'playing') {
+        this.state = 'paused';
+        this.speechInputActive = true;
+        this.speechDraft = '';
+      }
+      if (e.key.toLowerCase() === 'v') {
+        // Toggle mute with V
         const enabled = this.soundManager.toggleSound();
         console.log(`Sound ${enabled ? 'enabled' : 'muted'}`);
       }
@@ -345,6 +392,7 @@ export class Game {
     this.state = 'playing';
     this.score = 0;
     this.lives = 3;
+    this.ammo = 1_000_000_000_000_000_000_000_000_000n;
     this.ghostsDestroyed = 0;
 
     // Clear entities
@@ -359,7 +407,12 @@ export class Game {
     this.ghostSpawnTimer = 0;
     this.specialGhostTimer = 0;
     this.rainbowGhostTimer = 0;
+    this.outlinedGhostTimer = 0;
+    this.outlinedGhostPauseTimer = 0;
+    this.pendingHurricaneGhost = null;
+    this.pendingHurricaneGhostLastY = 0;
     this.bossGhostTimer = 0;
+    this.nextBossSpawnX = null;
     this.lifeLostTime = 0;
 
     // Reset player position
@@ -413,9 +466,19 @@ export class Game {
     
     // Handle player input
     this.handleInput(currentTime);
+
+    if (this.speechBubbleTimer > 0) {
+      this.speechBubbleTimer = Math.max(0, this.speechBubbleTimer - deltaTime * 1000);
+    }
     
     // Update player
     this.player.update(deltaTime);
+
+    if (this.outlinedGhostPauseTimer > 0) {
+      this.outlinedGhostPauseTimer = Math.max(0, this.outlinedGhostPauseTimer - deltaTime * 1000);
+    }
+
+    const bossTimerSpeedMultiplier = this.outlinedGhostPauseTimer > 0 ? 1 / 3 : 1;
     
     // Keep player on screen
     if (this.player.position.x < this.player.width / 2) {
@@ -435,6 +498,12 @@ export class Game {
       effect.update(deltaTime);
       return !effect.isComplete;
     });
+
+    this.ghostTalkTimer += deltaTime * 1000;
+    if (this.ghostTalkTimer >= this.ghostTalkInterval) {
+      this.makeGhostTalk();
+      this.ghostTalkTimer = 0;
+    }
     
     // Update ghosts
     this.ghosts.forEach(ghost => {
@@ -463,41 +532,69 @@ export class Game {
       }
     });
     
-    // Spawn regular ghosts
-    this.ghostSpawnTimer += deltaTime * 1000;
-    if (this.ghostSpawnTimer >= this.ghostSpawnInterval) {
-      this.spawnGhost();
-      this.ghostSpawnTimer = 0;
+    // Queue outlined ghost event every 2 min testing / 5 min gaming
+    this.outlinedGhostTimer += deltaTime * 1000;
+    if (this.outlinedGhostTimer >= this.outlinedGhostInterval) {
+      this.queueOutlinedGhostAppearance();
+      this.outlinedGhostTimer = 0;
+    }
+
+    this.updatePendingHurricaneTrigger();
+
+    if (this.outlinedGhostPauseTimer <= 0) {
+      // Spawn regular ghosts
+      this.ghostSpawnTimer += deltaTime * 1000;
+      if (this.ghostSpawnTimer >= this.ghostSpawnInterval) {
+        this.spawnGhost();
+        this.ghostSpawnTimer = 0;
+      }
+      
+      // Spawn special white ghost every 30 seconds
+      this.specialGhostTimer += deltaTime * 1000;
+      if (this.specialGhostTimer >= this.specialGhostInterval) {
+        this.spawnGhost('special');
+        this.specialGhostTimer = 0;
+      }
+      
+      // Spawn rainbow ghost every 2 minutes
+      this.rainbowGhostTimer += deltaTime * 1000;
+      if (this.rainbowGhostTimer >= this.rainbowGhostInterval) {
+        this.spawnGhost('rainbow');
+        this.rainbowGhostTimer = 0;
+      }
     }
     
-    // Spawn special white ghost every 30 seconds
-    this.specialGhostTimer += deltaTime * 1000;
-    if (this.specialGhostTimer >= this.specialGhostInterval) {
-      this.spawnGhost('special');
-      this.specialGhostTimer = 0;
-    }
-    
-    // Spawn rainbow ghost every 2 minutes
-    this.rainbowGhostTimer += deltaTime * 1000;
-    if (this.rainbowGhostTimer >= this.rainbowGhostInterval) {
-      this.spawnGhost('rainbow');
-      this.rainbowGhostTimer = 0;
-    }
-    
-    // Spawn boss ghost every 3 minutes or on demand
-    this.bossGhostTimer += deltaTime * 1000;
-    if (this.bossGhostTimer >= this.bossGhostInterval) {
-      this.spawnGhost('boss');
-      this.bossGhostTimer = 0;
-    }
-    
-    // Handle forced boss spawn from hotkey
+    // Boss timer runs 3x slower during outlined ghost pause effect
+    this.bossGhostTimer += deltaTime * 1000 * bossTimerSpeedMultiplier;
+
     if (this.forceBossSpawn) {
-      this.forceBossSpawnTimer -= deltaTime * 1000;
-      if (this.forceBossSpawnTimer <= 0) {
-        this.spawnGhost('boss');
-        this.forceBossSpawn = false;
-        this.bossGhostTimer = 0; // Reset regular timer
+      this.forceBossSpawnTimer -= deltaTime * 1000 * bossTimerSpeedMultiplier;
+    }
+
+    if (this.outlinedGhostPauseTimer <= 0) {
+      const timeToBossSpawn = this.bossGhostInterval - this.bossGhostTimer;
+      if (this.nextBossSpawnX === null && timeToBossSpawn <= this.bossWarningThreshold) {
+        this.nextBossSpawnX = this.getRandomGhostSpawnX(160);
+      }
+
+      // Spawn boss ghost every 3 minutes or on demand
+      if (this.bossGhostTimer >= this.bossGhostInterval) {
+        this.spawnGhost('boss', this.nextBossSpawnX ?? undefined);
+        this.bossGhostTimer = 0;
+        this.nextBossSpawnX = null;
+      }
+      
+      // Handle forced boss spawn from hotkey
+      if (this.forceBossSpawn) {
+        if (this.forceBossSpawnTimer <= 0) {
+          const shouldSpawnBoss = Math.random() < 0.85;
+          if (shouldSpawnBoss) {
+            this.spawnGhost('boss', this.nextBossSpawnX ?? undefined);
+            this.bossGhostTimer = 0; // Reset regular timer only if boss actually spawns
+          }
+          this.forceBossSpawn = false;
+          this.nextBossSpawnX = null;
+        }
       }
     }
     
@@ -573,6 +670,13 @@ export class Game {
   }
 
   private shoot() {
+    if (this.ammo <= 0n) {
+      this.state = 'gameOver';
+      this.soundManager.playGameOver();
+      this.onStateChange?.('gameOver', { score: this.score });
+      return;
+    }
+
     const projectile = new Projectile(
       this.player.position.x,
       this.player.position.y
@@ -581,6 +685,13 @@ export class Game {
     projectile.height *= this.scale;
     projectile.speed *= this.scale;
     this.projectiles.push(projectile);
+    this.ammo -= 1n;
+
+    if (this.ammo === 0n) {
+      this.state = 'gameOver';
+      this.soundManager.playGameOver();
+      this.onStateChange?.('gameOver', { score: this.score });
+    }
     
     // Play shoot sound
     this.soundManager.playShoot();
@@ -620,13 +731,13 @@ export class Game {
     });
   }
 
-  private spawnGhost(type: GhostType = 'normal') {
+  private spawnGhost(type: GhostType = 'normal', spawnX?: number) {
     let baseSize = 40;
     if (type === 'special') baseSize = 80;
     if (type === 'rainbow') baseSize = 120;
     if (type === 'boss') baseSize = 160; // 4x regular size
     
-    const x = Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
+    const x = spawnX ?? this.getRandomGhostSpawnX(baseSize);
     const ghost = new Ghost(x, -baseSize * this.scale, type);
     ghost.width *= this.scale;
     ghost.height *= this.scale;
@@ -638,67 +749,155 @@ export class Game {
     this.soundManager.playGhostSpawn(type, x, this.width);
   }
 
+  private getRandomGhostSpawnX(baseSize: number): number {
+    return Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
+  }
+
+  private handleOutlinedGhostShot() {
+    this.ghosts = [];
+    this.projectiles = [];
+    this.visualEffects = [];
+    this.outlinedGhostPauseTimer = this.outlinedGhostPauseDuration;
+    this.pendingHurricaneGhost = null;
+    this.pendingHurricaneGhostLastY = 0;
+  }
+
+  private queueOutlinedGhostAppearance() {
+    const unluckyGhost = this.chooseUnluckyGhostForCenterSlash();
+
+    if (unluckyGhost) {
+      this.pendingHurricaneGhost = unluckyGhost;
+      this.pendingHurricaneGhostLastY = unluckyGhost.position.y;
+      return;
+    }
+
+    this.spawnGhost();
+    this.pendingHurricaneGhost = this.chooseUnluckyGhostForCenterSlash();
+    if (this.pendingHurricaneGhost) {
+      this.pendingHurricaneGhostLastY = this.pendingHurricaneGhost.position.y;
+    }
+  }
+
+  private chooseUnluckyGhostForCenterSlash(): Ghost | null {
+    const centerY = this.height / 2;
+    const candidates = this.ghosts.filter(ghost => ghost.type !== 'boss');
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const approachingCenter = candidates.filter(ghost => ghost.position.y < centerY);
+    if (approachingCenter.length > 0) {
+      return approachingCenter[Math.floor(Math.random() * approachingCenter.length)];
+    }
+
+    return candidates.reduce((closestGhost, ghost) => {
+      const ghostDistance = Math.abs(ghost.position.y - centerY);
+      const closestDistance = Math.abs(closestGhost.position.y - centerY);
+      return ghostDistance < closestDistance ? ghost : closestGhost;
+    });
+  }
+
+  private updatePendingHurricaneTrigger() {
+    if (!this.pendingHurricaneGhost) {
+      return;
+    }
+
+    const trackedGhost = this.ghosts.find(ghost => ghost === this.pendingHurricaneGhost);
+    if (!trackedGhost || trackedGhost.type === 'boss') {
+      this.pendingHurricaneGhost = this.chooseUnluckyGhostForCenterSlash();
+      this.pendingHurricaneGhostLastY = this.pendingHurricaneGhost?.position.y ?? 0;
+      return;
+    }
+
+    const centerY = this.height / 2;
+    const overlapsCenterLine = Math.abs(trackedGhost.position.y - centerY) <= trackedGhost.height / 2;
+    const crossedCenterLine = (this.pendingHurricaneGhostLastY - centerY) * (trackedGhost.position.y - centerY) <= 0;
+    this.pendingHurricaneGhostLastY = trackedGhost.position.y;
+    if (overlapsCenterLine || crossedCenterLine) {
+      this.pendingHurricaneGhost = null;
+      this.pendingHurricaneGhostLastY = 0;
+      this.triggerOutlinedGhostAppearance(trackedGhost);
+    }
+  }
+
+  private triggerOutlinedGhostAppearance(forceChopGhost?: Ghost) {
+    this.soundManager.playHurricaneSlice();
+
+    const middleY = this.height / 2;
+    this.visualEffects.push(new HurricaneSliceEffect(this.width, middleY));
+    this.ghosts = this.ghosts.filter(ghost => {
+      if (ghost.type === 'boss') return true;
+      if (ghost === forceChopGhost || Math.abs(ghost.position.y - middleY) <= ghost.height / 2) {
+        this.visualEffects.push(new GhostChopEffect(ghost.position, ghost.width, ghost.height, ghost.color));
+        return false;
+      }
+      return true;
+    });
+
+    this.spawnGhost('outlined');
+  }
+
   private checkCollisions() {
     // Check projectile-ghost collisions
     let bossGhostToExplode: Ghost | null = null;
     let rainbowGhostsToExplode: Ghost[] = [];
+    let outlinedGhostWasShot = false;
     
     this.projectiles = this.projectiles.filter(projectile => {
       let hit = false;
       this.ghosts = this.ghosts.filter(ghost => {
         if (this.checkProjectileGhostCollision(projectile, ghost)) {
           const isDestroyed = ghost.takeDamage();
-          
+
           if (isDestroyed) {
             // Create explosion effect for destroyed ghost
             this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color));
-            
-            // Play destroyed sound
             this.soundManager.playGhostDestroyed(ghost.type);
-            
+
             // Points based on ghost type
             let points = 10;
             if (ghost.type === 'rainbow') {
-              points = 20; // Rainbow ghost destroyed
+              points = 20;
             } else if (ghost.type === 'special') {
-              points = 50; // Original white ghost
+              points = 50;
+            } else if (ghost.type === 'outlined') {
+              points = 50;
             } else if (ghost.type === 'boss') {
-              points = 100; // Boss ghost base points
+              points = 100;
             }
-            
+
             this.score += points;
             this.ghostsDestroyed++;
-            
-            // Check for life recovery every 100 ghosts
+
             if (this.ghostsDestroyed % 100 === 0) {
               this.lives++;
               this.soundManager.playExtraLife();
             }
-            
-            // Mark for area damage handling after the filter completes
+
             if (ghost.type === 'rainbow') {
               rainbowGhostsToExplode.push(ghost);
             } else if (ghost.type === 'boss') {
               bossGhostToExplode = ghost;
+            } else if (ghost.type === 'outlined') {
+              outlinedGhostWasShot = true;
             }
           } else {
             // Ghost survived hit
-            // Create a smaller explosion effect for the hit
             const smallExplosion = new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color);
-            smallExplosion.duration = 0.3; // Shorter duration
+            smallExplosion.duration = 0.3;
             this.visualEffects.push(smallExplosion);
-            
-            // Play hit sound
+
             this.soundManager.playGhostHit();
-            
-            // Points for hitting but not destroying
+
             if (ghost.type === 'rainbow') {
-              this.score += 30; // Rainbow ghost hit
+              this.score += 30;
+            } else if (ghost.type === 'outlined') {
+              this.score += 50;
             } else {
-              this.score += 25; // Special ghost hit
+              this.score += 25;
             }
           }
-          
+
           hit = true;
           return !isDestroyed; // Keep ghost if not destroyed
         }
@@ -706,6 +905,11 @@ export class Game {
       });
       return !hit;
     });
+
+    if (outlinedGhostWasShot) {
+      this.handleOutlinedGhostShot();
+      return;
+    }
     
     // Handle area explosions after the main collision loop
     rainbowGhostsToExplode.forEach(ghost => {
@@ -748,9 +952,23 @@ export class Game {
     // Draw game objects
     if (this.state !== 'gameOver') {
       this.player.render(this.ctx);
+      if (this.speechBubbleTimer > 0 && this.speechText) {
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = Math.max(1, this.scale);
+        this.ctx.font = `${Math.round(18 * this.scale)}px 'Oxanium', sans-serif`;
+        this.ctx.textAlign = 'center';
+        const bubbleY = this.player.position.y - this.player.height;
+        this.ctx.fillRect(this.player.position.x - 140 * this.scale, bubbleY - 38 * this.scale, 280 * this.scale, 32 * this.scale);
+        this.ctx.strokeRect(this.player.position.x - 140 * this.scale, bubbleY - 38 * this.scale, 280 * this.scale, 32 * this.scale);
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillText(this.speechText, this.player.position.x, bubbleY - 16 * this.scale);
+        this.ctx.textAlign = 'left';
+      }
       this.ghosts.forEach(ghost => ghost.render(this.ctx));
       this.projectiles.forEach(projectile => projectile.render(this.ctx));
       this.visualEffects.forEach(effect => effect.render(this.ctx));
+      this.drawBossIncomingIndicator();
     }
 
     // Draw UI
@@ -866,6 +1084,10 @@ export class Game {
     this.ctx.fillStyle = '#88FF88';
     this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
     this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, padding, padding * 5);
+
+    // Ammo counter
+    this.ctx.fillStyle = '#FFD700';
+    this.ctx.fillText(`Ammo: ${this.ammo.toLocaleString()}`, padding, padding * 6.2);
     
     // Reset font for other UI elements
     this.ctx.fillStyle = 'white';
@@ -884,12 +1106,20 @@ export class Game {
       this.ctx.fillStyle = '#888888';
       this.ctx.fillText(`Nuke in: ${secondsRemaining}s`, this.width / 2, padding * 4);
     }
+
+    // Boss spawn timer
+    const bossTimeRemaining = this.forceBossSpawn
+      ? Math.max(0, this.forceBossSpawnTimer)
+      : Math.max(0, this.bossGhostInterval - this.bossGhostTimer);
+    const bossSecondsRemaining = Math.ceil(bossTimeRemaining / 1000);
+    this.ctx.fillStyle = '#FF9CCB';
+    this.ctx.fillText(`Boss in: ${bossSecondsRemaining}s`, this.width / 2, padding * 5.2);
     
     // Sound indicator
     this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
     const soundEnabled = this.soundManager.isSoundEnabled();
     this.ctx.fillStyle = soundEnabled ? '#88FF88' : '#FF8888';
-    this.ctx.fillText(soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF', this.width / 2, padding * 6);
+    this.ctx.fillText(soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF', this.width / 2, padding * 6.4);
     this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     
     this.ctx.textAlign = 'left';
@@ -904,13 +1134,59 @@ export class Game {
       this.ctx.fillStyle = 'white';
       this.ctx.font = `${Math.round(48 * this.scale)}px 'Oxanium', sans-serif`;
       this.ctx.textAlign = 'center';
-      this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
-      this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
-      const resumeText = this.isMobile ? 'Tap to resume' : 'Press ESC to resume';
-      this.ctx.fillText(resumeText, this.width / 2, this.height / 2 + 40 * this.scale);
+      if (this.speechInputActive) {
+        this.ctx.fillText('TYPE YOUR SPEECH', this.width / 2, this.height / 2);
+        this.ctx.font = `${Math.round(26 * this.scale)}px 'Oxanium', sans-serif`;
+        this.ctx.fillStyle = '#88CCFF';
+        this.ctx.fillText(this.speechDraft || '...', this.width / 2, this.height / 2 + 40 * this.scale);
+        this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
+        this.ctx.fillStyle = 'white';
+        this.ctx.fillText('Press ESC to show bubble', this.width / 2, this.height / 2 + 80 * this.scale);
+      } else {
+        this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
+        this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
+        const resumeText = this.isMobile ? 'Tap to resume' : 'Press ESC to resume';
+        this.ctx.fillText(resumeText, this.width / 2, this.height / 2 + 40 * this.scale);
+      }
       this.ctx.textAlign = 'left';
     }
     // Game over UI handled by HTML overlay
+  }
+
+  private drawBossIncomingIndicator() {
+    const bossOnScreen = this.ghosts.some(ghost => ghost.type === 'boss');
+    if (bossOnScreen || this.state !== 'playing') {
+      return;
+    }
+
+    const isForceIncoming = this.forceBossSpawn;
+    const isTimedIncoming = (this.bossGhostInterval - this.bossGhostTimer) <= this.bossWarningThreshold;
+    if (!isForceIncoming && !isTimedIncoming) {
+      return;
+    }
+
+    if (this.nextBossSpawnX === null) {
+      this.nextBossSpawnX = this.getRandomGhostSpawnX(160);
+    }
+
+    const x = this.nextBossSpawnX;
+    const y = 24 * this.scale;
+    const arrowSize = 20 * this.scale;
+
+    this.ctx.save();
+    this.ctx.fillStyle = '#FF69B4';
+    this.ctx.strokeStyle = '#FFFFFF';
+    this.ctx.lineWidth = Math.max(2, 2 * this.scale);
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y + arrowSize);
+    this.ctx.lineTo(x - arrowSize * 0.6, y);
+    this.ctx.lineTo(x + arrowSize * 0.6, y);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    this.ctx.restore();
   }
 
   private handleRainbowGhostExplosion(rainbowGhost: Ghost) {
@@ -1017,8 +1293,10 @@ export class Game {
       { key: 'SPACE', action: 'Shoot' },
       { key: 'N', action: 'Nuke' },
       { key: 'B', action: 'Boss in 5s' },
+      { key: 'E', action: 'End Game' },
+      { key: 'S', action: 'Type Speech' },
+      { key: 'V', action: 'Mute Sounds' },
       { key: 'ESC', action: 'Pause Game' },
-      { key: 'S', action: 'Mute Sounds' },
       { key: 'M', action: 'Music Change' },
       { key: 'H', action: 'Hide Help' }
     ];
@@ -1038,6 +1316,33 @@ export class Game {
     });
     
     this.ctx.restore();
+  }
+
+  private makeGhostTalk() {
+    if (this.ghosts.length === 0 || this.outlinedGhostPauseTimer > 0) {
+      return;
+    }
+
+    const talkingGhosts = this.ghosts.filter(ghost => ghost.speechTimer > 0);
+    if (talkingGhosts.length >= 2) {
+      return;
+    }
+
+    const speaker = this.ghosts[Math.floor(Math.random() * this.ghosts.length)];
+    const phrases = [
+      'Boo!',
+      'Hello!',
+      'Run!',
+      'Wee!',
+      'Hola!',
+      'Salut!',
+      'Ciao!',
+      'Konnichiwa!',
+      'Ni hao!',
+      'Namaste!'
+    ];
+
+    speaker.speak(phrases[Math.floor(Math.random() * phrases.length)]);
   }
 }
 

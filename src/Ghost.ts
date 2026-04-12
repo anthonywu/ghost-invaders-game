@@ -1,6 +1,6 @@
 import { GameObject, Vector2D, RAINBOW_COLORS } from './types';
 
-export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss';
+export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined';
 
 export class Ghost implements GameObject {
   position: Vector2D;
@@ -20,6 +20,8 @@ export class Ghost implements GameObject {
   isRainbow: boolean = false;
   pulseTime: number = 0;
   isBoss: boolean = false;
+  speechText: string = '';
+  speechTimer: number = 0;
 
   constructor(x: number, y: number, type: GhostType = 'normal') {
     this.position = { x, y };
@@ -61,6 +63,10 @@ export class Ghost implements GameObject {
         this.baseSpeed = 30; // Slower, more menacing
         this.isBoss = true;
         break;
+      case 'outlined':
+        this.color = RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)];
+        this.baseSpeed = 25; // Half speed of normal ghosts
+        break;
       default:
         this.color = RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)];
         break;
@@ -92,6 +98,18 @@ export class Ghost implements GameObject {
     if (this.isBoss) {
       this.pulseTime += deltaTime * 3; // Faster pulsing for unstable effect
     }
+
+    if (this.speechTimer > 0) {
+      this.speechTimer = Math.max(0, this.speechTimer - deltaTime * 1000);
+      if (this.speechTimer === 0) {
+        this.speechText = '';
+      }
+    }
+  }
+
+  speak(text: string, durationMs: number = 2500) {
+    this.speechText = text;
+    this.speechTimer = durationMs;
   }
 
   takeDamage(): boolean {
@@ -141,6 +159,8 @@ export class Ghost implements GameObject {
       ctx.shadowOffsetY = 0;
     }
     
+    const isOutlined = this.type === 'outlined';
+
     // Ghost body
     if (this.isRainbow) {
       // Create ghost shape path for clipping
@@ -197,6 +217,10 @@ export class Ghost implements GameObject {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     } else {
       ctx.fillStyle = this.color;
+
+      if (isOutlined) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0)';
+      }
       
       // Add glow effect for special ghost
       if (this.type === 'special') {
@@ -233,6 +257,12 @@ export class Ghost implements GameObject {
     
     ctx.closePath();
     ctx.fill();
+
+    if (this.type === 'outlined') {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = Math.max(2, this.width / 14);
+      ctx.stroke();
+    }
     
     // Eyes
     const eyeY = this.position.y - this.height/8;
@@ -251,6 +281,34 @@ export class Ghost implements GameObject {
     ctx.arc(this.position.x - eyeSpacing, eyeY + 2, this.width/16, 0, Math.PI * 2);
     ctx.arc(this.position.x + eyeSpacing, eyeY + 2, this.width/16, 0, Math.PI * 2);
     ctx.fill();
+
+    // Speech bubble
+    if (this.speechTimer > 0 && this.speechText) {
+      const bubbleWidth = Math.max(this.width * 1.8, this.speechText.length * 9);
+      const bubbleHeight = Math.max(28, this.height * 0.4);
+      const bubbleX = this.position.x - bubbleWidth / 2;
+      const bubbleY = this.position.y - this.height / 2 - bubbleHeight - 12;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(1, this.width / 32);
+      ctx.fillRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
+      ctx.strokeRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
+
+      ctx.beginPath();
+      ctx.moveTo(this.position.x - 6, bubbleY + bubbleHeight);
+      ctx.lineTo(this.position.x + 6, bubbleY + bubbleHeight);
+      ctx.lineTo(this.position.x, bubbleY + bubbleHeight + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.font = `${Math.max(12, Math.round(this.width * 0.22))}px 'Oxanium', sans-serif`;
+      ctx.fillText(this.speechText, this.position.x, bubbleY + bubbleHeight * 0.68);
+      ctx.textAlign = 'left';
+    }
     
     // Reset shadow for other elements
     if (this.type === 'special' || this.isRainbow) {

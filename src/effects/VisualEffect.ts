@@ -195,3 +195,122 @@ interface Particle {
   rotation: number;
   rotationSpeed: number;
 }
+
+export class HurricaneSliceEffect implements VisualEffect {
+  position: Vector2D;
+  isComplete: boolean = false;
+  private elapsed: number = 0;
+  private duration: number = 0.45;
+  private width: number;
+
+  constructor(canvasWidth: number, y: number) {
+    this.position = { x: canvasWidth / 2, y };
+    this.width = canvasWidth;
+  }
+
+  update(deltaTime: number): void {
+    this.elapsed += deltaTime;
+    if (this.elapsed >= this.duration) {
+      this.isComplete = true;
+    }
+  }
+
+  render(ctx: CanvasRenderingContext2D): void {
+    if (this.isComplete) return;
+
+    const progress = this.elapsed / this.duration;
+    const alpha = 1 - progress;
+    const thickness = 24 * (1 - progress * 0.6);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(180, 255, 255, ${alpha * 0.95})`;
+    ctx.lineWidth = thickness;
+    ctx.shadowColor = `rgba(255, 255, 255, ${alpha})`;
+    ctx.shadowBlur = 40;
+    ctx.beginPath();
+    ctx.moveTo(0, this.position.y);
+    ctx.lineTo(this.width, this.position.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+export class GhostChopEffect implements VisualEffect {
+  position: Vector2D;
+  isComplete: boolean = false;
+  private elapsed: number = 0;
+  private duration: number = 0.65;
+  private width: number;
+  private height: number;
+  private color: string;
+
+  constructor(position: Vector2D, width: number, height: number, color: string) {
+    this.position = { ...position };
+    this.width = width;
+    this.height = height;
+    this.color = color === 'rainbow' ? '#FF00FF' : color;
+  }
+
+  update(deltaTime: number): void {
+    this.elapsed += deltaTime;
+    if (this.elapsed >= this.duration) {
+      this.isComplete = true;
+    }
+  }
+
+  render(ctx: CanvasRenderingContext2D): void {
+    if (this.isComplete) return;
+
+    const progress = this.elapsed / this.duration;
+    const alpha = 1 - progress;
+    const splitX = this.width * 0.55 * progress;
+    const leftX = this.position.x - splitX;
+    const rightX = this.position.x + splitX;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this.color;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.position.x - this.width / 2 - splitX, this.position.y - this.height / 2, this.width / 2, this.height);
+    ctx.clip();
+    this.drawGhostBodyPath(ctx, leftX);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.position.x + splitX, this.position.y - this.height / 2, this.width / 2, this.height);
+    ctx.clip();
+    this.drawGhostBodyPath(ctx, rightX);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.position.x, this.position.y - this.height / 2);
+    ctx.lineTo(this.position.x, this.position.y + this.height / 2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  private drawGhostBodyPath(ctx: CanvasRenderingContext2D, x: number): void {
+    ctx.beginPath();
+    ctx.arc(x, this.position.y, this.width / 2, Math.PI, 0, false);
+    ctx.lineTo(x + this.width / 2, this.position.y + this.height / 2);
+
+    const waves = 3;
+    const waveWidth = this.width / waves;
+    for (let i = waves - 1; i >= 0; i--) {
+      const waveX = x - this.width / 2 + i * waveWidth;
+      ctx.lineTo(waveX + waveWidth, this.position.y + this.height / 2);
+      ctx.arc(waveX + waveWidth / 2, this.position.y + this.height / 2, waveWidth / 2, 0, Math.PI, false);
+    }
+
+    ctx.closePath();
+  }
+}

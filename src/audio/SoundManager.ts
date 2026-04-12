@@ -186,7 +186,7 @@ export class SoundManager {
     this.playSound('shoot', 0.5);
   }
   
-  playGhostSpawn(ghostType: 'normal' | 'special' | 'rainbow' | 'boss', x: number, canvasWidth: number) {
+  playGhostSpawn(ghostType: 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined', x: number, canvasWidth: number) {
     const pan = this.calculatePan(x, canvasWidth);
     
     switch (ghostType) {
@@ -202,6 +202,9 @@ export class SoundManager {
       case 'boss':
         this.playSound('bossGhostSpawn', 0.7, pan);
         break;
+      case 'outlined':
+        this.playSound('ghostSpawn', 0.45, pan);
+        break;
     }
   }
   
@@ -209,7 +212,7 @@ export class SoundManager {
     this.playSound('ghostHit', 0.4);
   }
   
-  playGhostDestroyed(ghostType: 'normal' | 'special' | 'rainbow' | 'boss') {
+  playGhostDestroyed(ghostType: 'normal' | 'special' | 'rainbow' | 'boss' | 'outlined') {
     if (ghostType === 'rainbow') {
       this.playSound('rainbowExplosion', 0.6);
     } else if (ghostType === 'boss') {
@@ -247,6 +250,36 @@ export class SoundManager {
   
   playPause() {
     this.playSound('pause', 0.3);
+  }
+
+  playHurricaneSlice() {
+    if (!this.enabled) return;
+
+    const now = this.audioContext.currentTime;
+    const duration = 0.9;
+    const noiseBuffer = this.audioContext.createBuffer(1, this.audioContext.sampleRate * duration, this.audioContext.sampleRate);
+    const channelData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channelData.length; i++) {
+      channelData[i] = (Math.random() * 2 - 1) * 0.35;
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = noiseBuffer;
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(280, now);
+    filter.frequency.exponentialRampToValueAtTime(2200, now + duration);
+    filter.Q.value = 1.8;
+    const gain = this.audioContext.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+    source.start(now);
+    source.stop(now + duration);
   }
   
   /**
