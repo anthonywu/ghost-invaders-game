@@ -14,6 +14,7 @@ export class Projectile implements GameObject {
   }
 
   update(deltaTime: number) {
+    this.position.x += this.velocity.x * deltaTime;
     this.position.y += this.velocity.y * deltaTime;
   }
 

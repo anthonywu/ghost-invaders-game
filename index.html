@@ -10,27 +10,47 @@
     <body>
         <!-- Side decorations (desktop only) -->
         <div class="side-decoration left">
-            <img src="/images/graphic01.png" alt="" />
+            <img id="decorLeft" alt="" />
         </div>
         <div class="side-decoration right">
-            <img src="/images/graphic05.png" alt="" />
+            <img id="decorRight" alt="" />
         </div>
 
         <!-- Title splash overlay -->
         <div id="splashOverlay" class="overlay">
             <div class="tap-target"></div>
-            <img src="/images/graphic03.png" alt="Ghost Invaders" class="splash-image" />
+            <img src="/images/graphic03.webp" alt="Ghost Invaders" class="splash-image" />
             <div class="start-prompt">Press SPACE or Tap to Start</div>
         </div>
 
         <!-- Game over overlay -->
         <div id="gameOverOverlay" class="overlay hidden">
             <div class="tap-target"></div>
-            <img src="/images/graphic04.png" alt="Game Over" class="gameover-image" />
+            <img src="/images/graphic04.webp" alt="Game Over" class="gameover-image" />
             <div class="gameover-stats">
                 <div class="final-score">Score: <span id="finalScore">0</span></div>
+                <div id="newHighScore" class="new-high-score hidden">
+                    NEW HIGH SCORE!
+                </div>
+                <dl class="run-stats">
+                    <div><dt>Best</dt><dd id="statBest">0</dd></div>
+                    <div><dt>Ghosts</dt><dd id="statGhosts">0</dd></div>
+                    <div><dt>Accuracy</dt><dd id="statAccuracy">0%</dd></div>
+                    <div><dt>Best combo</dt><dd id="statCombo">0</dd></div>
+                    <div><dt>Time</dt><dd id="statTime">0:00</dd></div>
+                </dl>
                 <div class="restart-prompt">Press SPACE or Tap to Play Again</div>
             </div>
+        </div>
+
+        <!-- On-screen audio controls (the only way to mute without a keyboard) -->
+        <div id="audioControls" class="audio-controls">
+            <button id="muteButton" type="button" aria-label="Toggle sound">
+                Sound on
+            </button>
+            <button id="musicButton" type="button" aria-label="Change music">
+                Music
+            </button>
         </div>
 
         <div id="app">

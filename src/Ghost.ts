@@ -1,6 +1,6 @@
 import { GameObject, Vector2D, RAINBOW_COLORS } from './types';
 
-export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss';
+export type GhostType = 'normal' | 'special' | 'rainbow' | 'boss' | 'zigzag' | 'splitter';
 
 export class Ghost implements GameObject {
   position: Vector2D;
@@ -20,6 +20,12 @@ export class Ghost implements GameObject {
   isRainbow: boolean = false;
   pulseTime: number = 0;
   isBoss: boolean = false;
+  isZigzag: boolean = false;
+  isSplitter: boolean = false;
+  /** Set when a splitter fragment spawns, so fragments don't split again. */
+  isFragment: boolean = false;
+  private zigzagPhase: number = Math.random() * Math.PI * 2;
+  private zigzagAmplitude: number = 90; // px/sec of horizontal sway
 
   constructor(x: number, y: number, type: GhostType = 'normal') {
     this.position = { x, y };
@@ -61,6 +67,22 @@ export class Ghost implements GameObject {
         this.baseSpeed = 30; // Slower, more menacing
         this.isBoss = true;
         break;
+      case 'zigzag':
+        // Erratic sideways weaver - normal size, harder to line up
+        this.color = '#00FFAA';
+        this.baseSpeed = 60;
+        this.isZigzag = true;
+        break;
+      case 'splitter':
+        // Splits into two normal ghosts when destroyed
+        this.width = 60;
+        this.height = 60;
+        this.originalWidth = 60;
+        this.originalHeight = 60;
+        this.color = '#B478FF';
+        this.baseSpeed = 45;
+        this.isSplitter = true;
+        break;
       default:
         this.color = RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)];
         break;
@@ -83,6 +105,9 @@ export class Ghost implements GameObject {
   update(deltaTime: number) {
     if (this.isEvading) {
       this.velocity.x = this.evasionSpeed * this.evasionDirection;
+    } else if (this.isZigzag) {
+      this.zigzagPhase += deltaTime * 2.5;
+      this.velocity.x = Math.sin(this.zigzagPhase) * this.zigzagAmplitude;
     }
     
     this.position.x += this.velocity.x * deltaTime;
@@ -257,7 +282,36 @@ export class Ghost implements GameObject {
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
     }
-    
+
+    ctx.restore();
+
+    this.renderHealthBar(ctx);
+  }
+
+  /** Only drawn for ghosts that survive more than one hit. */
+  private renderHealthBar(ctx: CanvasRenderingContext2D) {
+    if (this.maxHitPoints <= 1) return;
+
+    const barWidth = this.originalWidth * 0.8;
+    const barHeight = Math.max(4, this.originalHeight * 0.07);
+    const x = this.position.x - barWidth / 2;
+    const y = this.position.y - this.height / 2 - barHeight * 2.2;
+    const fraction = Math.max(0, this.hitPoints / this.maxHitPoints);
+
+    ctx.save();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
+
+    // Green while healthy, amber mid, red on the last hit
+    ctx.fillStyle = fraction > 0.6 ? '#4CE04C' : fraction > 0.3 ? '#FFC63A' : '#FF4D4D';
+    ctx.fillRect(x, y, barWidth * fraction, barHeight);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
+
     ctx.restore();
   }
 }
