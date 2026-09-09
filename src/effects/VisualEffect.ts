@@ -184,6 +184,70 @@ export class ExplosionEffect implements VisualEffect {
   }
 }
 
+export class ScorePopup implements VisualEffect {
+  position: Vector2D;
+  isComplete: boolean = false;
+  private text: string;
+  private color: string;
+  private fontSize: number;
+  private duration: number = 0.9;
+  private elapsed: number = 0;
+  private driftY: number = 0;
+
+  constructor(position: Vector2D, text: string, color: string = '#FFFFFF', fontSize: number = 22) {
+    this.position = { ...position };
+    this.text = text;
+    this.color = color;
+    this.fontSize = fontSize;
+  }
+
+  update(deltaTime: number): void {
+    this.elapsed += deltaTime;
+    if (this.elapsed >= this.duration) {
+      this.isComplete = true;
+      return;
+    }
+    // Rise quickly then settle
+    this.driftY -= (60 - this.driftY * 0.5) * deltaTime;
+  }
+
+  render(ctx: CanvasRenderingContext2D): void {
+    if (this.isComplete) return;
+
+    const progress = this.elapsed / this.duration;
+    const opacity = 1 - progress * progress; // hold bright, fade late
+    // Small pop at the start
+    const scale = progress < 0.15 ? 0.7 + (progress / 0.15) * 0.4 : 1.1 - (progress - 0.15) * 0.1;
+
+    ctx.save();
+    ctx.translate(this.position.x, this.position.y + this.driftY);
+    ctx.scale(scale, scale);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${this.fontSize}px 'Oxanium', sans-serif`;
+
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
+    ctx.strokeText(this.text, 0, 0);
+
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = this.color;
+    ctx.fillStyle = this.color.startsWith('#')
+      ? hexToRgba(this.color, opacity)
+      : this.color;
+    ctx.fillText(this.text, 0, 0);
+
+    ctx.restore();
+  }
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 interface Particle {
   x: number;
   y: number;

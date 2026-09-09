@@ -203,3 +203,80 @@ footer a:hover {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+/* Let taps fall through the stats block to the overlay's tap target */
+.gameover-stats {
+    pointer-events: none;
+}
+
+.new-high-score {
+    margin: 6px 0 2px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffd700;
+    text-shadow: 0 0 14px rgba(255, 215, 0, 0.8);
+    animation: blink 1.2s ease-in-out infinite;
+}
+.new-high-score.hidden {
+    display: none;
+}
+
+/* Post-game run statistics */
+.run-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 8px 18px;
+    margin: 14px auto 18px;
+    padding: 12px 18px;
+    max-width: 480px;
+    border: 1px solid rgba(0, 255, 255, 0.35);
+    border-radius: 8px;
+    background: rgba(0, 255, 255, 0.06);
+}
+.run-stats > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.run-stats dt {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+}
+.run-stats dd {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+}
+
+/* Audio controls - above the overlays so they stay reachable */
+.audio-controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 200;
+}
+.audio-controls button {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-family: 'Oxanium', sans-serif;
+    font-size: 13px;
+    color: #0ff;
+    background: rgba(0, 20, 30, 0.75);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    border-radius: 6px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.audio-controls button:hover {
+    background: rgba(0, 60, 80, 0.85);
+}
+.audio-controls button[aria-pressed='true'] {
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.6);
+}
