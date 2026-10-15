@@ -1,8 +1,13 @@
 import { Player } from './Player';
 import { Ghost, GhostType } from './Ghost';
 import { Projectile } from './Projectile';
-import { GameState } from './types';
-import { VisualEffect, NukeEffect, ExplosionEffect } from './effects/VisualEffect';
+import { GameState, Vector2D } from './types';
+import { VisualEffect, NukeEffect, ExplosionEffect, ScorePopup } from './effects/VisualEffect';
+import { PowerUp, PowerUpType } from './PowerUp';
+import {
+  LevelTheme, KILLS_PER_LEVEL, levelFromKills, themeForLevel,
+  difficultyForLevel, shipTierForLevel
+} from './levels';
 import { SoundManager } from './audio/SoundManager';
 
 export class Game {
@@ -18,7 +23,7 @@ export class Game {
   private visualEffects: VisualEffect[] = [];
   
   private state: GameState = 'menu';
-  private onStateChange?: (state: GameState, data?: { score?: number }) => void;
+  private onStateChange?: (state: GameState, data?: GameOverData) => void;
   private score: number = 0;
   private lives: number = 3;
   private ghostsDestroyed: number = 0;
@@ -26,8 +31,45 @@ export class Game {
   private lastShot: number = 0;
   private shotCooldown: number = 250; // 0.25 seconds
   
+  // --- Difficulty tuning ---------------------------------------------------
+  // Difficulty is driven by the current level (see levels.ts). It steps up each
+  // level until MAX_DIFFICULTY_LEVEL and then plateaus, so the game stays
+  // beatable for younger players. Adjust these three numbers plus the level
+  // constants in levels.ts to retune the whole curve.
+  private readonly spawnIntervalStart = 2000; // ms between spawns at level 1
+  private readonly spawnIntervalMin = 700; // ms between spawns at max level
+  private readonly ghostSpeedMaxMultiplier = 1.8; // ghost speed at max level
+  // -------------------------------------------------------------------------
+
+  // Level state
+  private level: number = 1;
+  private levelUpBannerUntil: number = 0;
+  private readonly levelBannerDuration = 2200; // ms
+
+  private highScore: number = 0;
+  private static readonly highScoreKey = 'ghostInvaders.highScore';
+
+  // Combo: consecutive kills without a missed shot
+  private combo: number = 0;
+  private bestCombo: number = 0;
+  private readonly comboKillsPerStep = 5; // kills needed per +1 multiplier
+  private readonly comboMaxMultiplier = 5;
+
+  // Run stats (reported on the game over screen)
+  private shotsFired: number = 0;
+  private shotsHit: number = 0;
+  private runStartTime: number = 0;
+
+  // Power-ups
+  private powerUps: PowerUp[] = [];
+  private shieldCharges: number = 0;
+  private rapidFireUntil: number = 0;
+  private multiShotUntil: number = 0;
+  private readonly powerUpDropChance = 0.12;
+  private readonly powerUpDuration = 8000; // ms
+  private readonly rapidFireCooldown = 90; // ms between shots while active
+
   private ghostSpawnTimer: number = 0;
-  private ghostSpawnInterval: number = 2000; // 2 seconds
   private specialGhostTimer: number = 0;
   private specialGhostInterval: number = 30000; // 30 seconds
   private rainbowGhostTimer: number = 0;
@@ -89,6 +131,8 @@ export class Game {
     
     // Initialize sound manager
     this.soundManager = new SoundManager();
+
+    this.loadHighScore();
     
     this.setupEventListeners();
   }
@@ -120,10 +164,7 @@ export class Game {
   private setupEventListeners() {
     window.addEventListener('keydown', async (e) => {
       // Initialize sound on first key press
-      if (!this.soundInitialized) {
-        await this.soundManager.init();
-        this.soundInitialized = true;
-      }
+      await this.ensureSoundInitialized();
 
       // Start from menu
       if (this.state === 'menu' && e.key === ' ') {
@@ -180,13 +221,6 @@ export class Game {
         this.state = 'paused';
       }
     });
-    
-    // Optional: Resume when browser gains focus (can be removed if you prefer manual resume)
-    // window.addEventListener('focus', () => {
-    //   if (this.state === 'paused') {
-    //     this.state = 'playing';
-    //   }
-    // });
   }
 
   private setupMobileControls() {
@@ -195,10 +229,7 @@ export class Game {
       e.preventDefault();
 
       // Initialize sound on first touch
-      if (!this.soundInitialized) {
-        await this.soundManager.init();
-        this.soundInitialized = true;
-      }
+      await this.ensureSoundInitialized();
 
       // Start from menu on tap
       if (this.state === 'menu') {
@@ -225,7 +256,7 @@ export class Game {
       
       // Shoot on tap
       const currentTime = performance.now();
-      if (currentTime - this.lastShot >= this.shotCooldown) {
+      if (currentTime - this.lastShot >= this.currentShotCooldown) {
         this.shoot();
         this.lastShot = currentTime;
       }
@@ -322,8 +353,9 @@ export class Game {
       projectile.position.y = (projectile.position.y / oldHeight) * this.height;
     });
     
-    // Adjust star positions proportionally
+    // Adjust star positions proportionally and rescale drift to the new height
     this.starLayers.forEach(layer => {
+      layer.speed = layer.speedFactor * this.height;
       layer.stars.forEach(star => {
         star.x = (star.x / oldWidth) * this.width;
         star.y = (star.y / oldHeight) * this.height;
@@ -362,6 +394,22 @@ export class Game {
     this.bossGhostTimer = 0;
     this.lifeLostTime = 0;
 
+    // Reset combo, power-ups and run stats
+    this.level = 1;
+    this.levelUpBannerUntil = 0;
+    this.player.tier = 1;
+    this.player.accentColor = this.theme.accent;
+    this.player.shieldCharges = 0;
+    this.combo = 0;
+    this.bestCombo = 0;
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+    this.runStartTime = performance.now();
+    this.powerUps = [];
+    this.shieldCharges = 0;
+    this.rapidFireUntil = 0;
+    this.multiShotUntil = 0;
+
     // Reset player position
     this.player.position.x = this.width / 2;
     this.player.position.y = this.height - 60 * this.scale;
@@ -370,13 +418,36 @@ export class Game {
     this.soundManager.resumeBackgroundMusic();
   }
 
-  setStateChangeCallback(callback: (state: GameState, data?: { score?: number }) => void) {
+  /** Audio needs a user gesture before it can start; safe to call repeatedly. */
+  async ensureSoundInitialized() {
+    if (this.soundInitialized) return;
+    await this.soundManager.init();
+    this.soundInitialized = true;
+  }
+
+  /**
+   * Returns true when sound is enabled after the toggle. The preload is started
+   * in the background rather than awaited: muting has to respond on the first
+   * tap, and neither control depends on the decoded effect buffers.
+   */
+  toggleSound(): boolean {
+    void this.ensureSoundInitialized();
+    return this.soundManager.toggleSound();
+  }
+
+  cycleMusic() {
+    void this.ensureSoundInitialized();
+    this.soundManager.cycleBackgroundMusic();
+  }
+
+  setStateChangeCallback(callback: (state: GameState, data?: GameOverData) => void) {
     this.onStateChange = callback;
   }
 
   startFromMenu() {
     if (this.state === 'menu') {
       this.state = 'playing';
+      this.runStartTime = performance.now();
       this.onStateChange?.('playing');
     }
   }
@@ -388,21 +459,81 @@ export class Game {
 
   private gameLoop() {
     const currentTime = performance.now();
-    const deltaTime = (currentTime - this.lastTime) / 1000;
+    // Clamp the step so a backgrounded tab does not resume with one huge frame
+    // that teleports ghosts and stars across the screen.
+    const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.05);
     this.lastTime = currentTime;
-    
+
+    // The starfield drifts in every state, so the menu and game over screens
+    // are alive rather than a frozen picture.
+    this.updateStarLayers(deltaTime);
+
     if (this.state === 'playing') {
       this.update(deltaTime, currentTime);
     }
-    
+
     this.render();
     requestAnimationFrame(() => this.gameLoop());
   }
 
+  /** 0 on level 1, reaching 1 at the max difficulty level, flat after that. */
+  private get difficulty(): number {
+    return difficultyForLevel(this.level);
+  }
+
+  private get theme(): LevelTheme {
+    return themeForLevel(this.level);
+  }
+
+  /**
+   * Recomputes the level from the kill count. Called after every kill so the
+   * banner, palette and ship tier stay in step with progress.
+   */
+  private updateLevel() {
+    const next = levelFromKills(this.ghostsDestroyed);
+    if (next === this.level) return;
+
+    this.level = next;
+    this.levelUpBannerUntil = performance.now() + this.levelBannerDuration;
+    this.player.tier = shipTierForLevel(this.level);
+    this.player.accentColor = this.theme.accent;
+    this.soundManager.playExtraLife();
+    this.visualEffects.push(new ScorePopup(
+      { x: this.width / 2, y: this.height * 0.32 },
+      `LEVEL ${this.level}`,
+      this.theme.accent,
+      Math.max(20, 38 * this.scale)
+    ));
+  }
+
+  private get currentSpawnInterval(): number {
+    return this.spawnIntervalStart -
+      (this.spawnIntervalStart - this.spawnIntervalMin) * this.difficulty;
+  }
+
+  private get ghostSpeedMultiplier(): number {
+    return 1 + (this.ghostSpeedMaxMultiplier - 1) * this.difficulty;
+  }
+
+  private loadHighScore() {
+    try {
+      this.highScore = parseInt(localStorage.getItem(Game.highScoreKey) ?? '', 10) || 0;
+    } catch {
+      this.highScore = 0; // storage disabled or private browsing
+    }
+  }
+
+  private saveHighScore() {
+    if (this.score <= this.highScore) return;
+    this.highScore = this.score;
+    try {
+      localStorage.setItem(Game.highScoreKey, String(this.highScore));
+    } catch {
+      // storage unavailable - keep the in-memory value for this session
+    }
+  }
+
   private update(deltaTime: number, currentTime: number) {
-    // Update parallax stars
-    this.updateStarLayers(deltaTime);
-    
     // Update nuke availability
     if (currentTime - this.lastNuke >= this.nukeCooldown) {
       if (!this.nukeReady) {
@@ -415,6 +546,7 @@ export class Game {
     this.handleInput(currentTime);
     
     // Update player
+    this.player.shieldCharges = this.shieldCharges;
     this.player.update(deltaTime);
     
     // Keep player on screen
@@ -424,10 +556,24 @@ export class Game {
       this.player.position.x = this.width - this.player.width / 2;
     }
     
-    // Update projectiles
+    // Update projectiles - a shot that leaves the screen breaks the combo
     this.projectiles = this.projectiles.filter(projectile => {
       projectile.update(deltaTime);
-      return !projectile.isOffScreen();
+      if (projectile.isOffScreen()) {
+        this.resetCombo();
+        return false;
+      }
+      return true;
+    });
+
+    // Update power-ups and check for pickup
+    this.powerUps = this.powerUps.filter(powerUp => {
+      powerUp.update(deltaTime);
+      if (this.checkPowerUpPlayerCollision(powerUp)) {
+        this.applyPowerUp(powerUp.type, currentTime);
+        return false;
+      }
+      return !powerUp.isOffScreen(this.height);
     });
     
     // Update visual effects
@@ -465,8 +611,8 @@ export class Game {
     
     // Spawn regular ghosts
     this.ghostSpawnTimer += deltaTime * 1000;
-    if (this.ghostSpawnTimer >= this.ghostSpawnInterval) {
-      this.spawnGhost();
+    if (this.ghostSpawnTimer >= this.currentSpawnInterval) {
+      this.spawnGhost(this.pickRegularGhostType());
       this.ghostSpawnTimer = 0;
     }
     
@@ -507,28 +653,17 @@ export class Game {
     // Check for ghosts that have reached the bottom or hit player
     this.ghosts = this.ghosts.filter(ghost => {
       if (ghost.position.y + ghost.height / 2 >= this.height) {
-        // Ghost escaped - lose a life
-        this.lives--;
-        this.lifeLostTime = performance.now();
-        this.soundManager.playLifeLost();
-        if (this.lives <= 0) {
-          this.state = 'gameOver';
-          this.soundManager.playGameOver();
-          this.onStateChange?.('gameOver', { score: this.score });
-        }
+        // Ghost escaped - lose a life (a shield does not stop an escape)
+        this.loseLife();
         return false;
       }
 
       if (this.checkGhostPlayerCollision(ghost)) {
-        // Ghost hit player - lose a life
-        this.lives--;
-        this.lifeLostTime = performance.now();
-        this.soundManager.playLifeLost();
-        if (this.lives <= 0) {
-          this.state = 'gameOver';
-          this.soundManager.playGameOver();
-          this.onStateChange?.('gameOver', { score: this.score });
+        // A shield charge absorbs the hit instead of costing a life
+        if (this.absorbWithShield(ghost.position)) {
+          return false;
         }
+        this.loseLife();
         return false;
       }
 
@@ -559,7 +694,7 @@ export class Game {
     }
     
     // Shooting (keyboard only - touch is handled in event listener)
-    if (this.keys.has(' ') && currentTime - this.lastShot >= this.shotCooldown) {
+    if (this.keys.has(' ') && currentTime - this.lastShot >= this.currentShotCooldown) {
       this.shoot();
       this.lastShot = currentTime;
     }
@@ -573,17 +708,208 @@ export class Game {
   }
 
   private shoot() {
-    const projectile = new Projectile(
-      this.player.position.x,
-      this.player.position.y
-    );
-    projectile.width *= this.scale;
-    projectile.height *= this.scale;
-    projectile.speed *= this.scale;
-    this.projectiles.push(projectile);
-    
+    // Multi-shot fires a three-way spread; otherwise a single straight shot
+    const angles = performance.now() < this.multiShotUntil ? [-0.28, 0, 0.28] : [0];
+
+    for (const angle of angles) {
+      const projectile = new Projectile(
+        this.player.position.x,
+        this.player.position.y
+      );
+      projectile.width *= this.scale;
+      projectile.height *= this.scale;
+      projectile.speed *= this.scale;
+      projectile.velocity.x = projectile.speed * Math.sin(angle);
+      projectile.velocity.y = -projectile.speed * Math.cos(angle);
+      this.projectiles.push(projectile);
+      this.shotsFired++;
+    }
+
     // Play shoot sound
     this.soundManager.playShoot();
+  }
+
+  private get currentShotCooldown(): number {
+    return performance.now() < this.rapidFireUntil ? this.rapidFireCooldown : this.shotCooldown;
+  }
+
+  private get comboMultiplier(): number {
+    return Math.min(
+      this.comboMaxMultiplier,
+      1 + Math.floor(this.combo / this.comboKillsPerStep)
+    );
+  }
+
+  /** Adds score with the combo multiplier applied and floats a popup at `at`. */
+  private addScore(basePoints: number, at?: Vector2D) {
+    const multiplier = this.comboMultiplier;
+    const gained = basePoints * multiplier;
+    this.score += gained;
+
+    if (at) {
+      this.visualEffects.push(new ScorePopup(
+        at,
+        multiplier > 1 ? `+${gained} x${multiplier}` : `+${gained}`,
+        multiplier > 1 ? '#FFD700' : '#FFFFFF',
+        Math.max(14, 22 * this.scale)
+      ));
+    }
+  }
+
+  private resetCombo() {
+    this.combo = 0;
+  }
+
+  /** Shared bookkeeping for a destroyed ghost: score, combo, drops, extra life. */
+  private registerKill(ghost: Ghost) {
+    this.visualEffects.push(new ExplosionEffect(
+      ghost.position,
+      ghost.color === 'rainbow' ? '#FF00FF' : ghost.color
+    ));
+    this.soundManager.playGhostDestroyed(ghost.type);
+
+    let points = 10;
+    if (ghost.type === 'rainbow') points = 20;
+    else if (ghost.type === 'special') points = 50;
+    else if (ghost.type === 'boss') points = 100;
+    else if (ghost.type === 'splitter') points = 15;
+    else if (ghost.type === 'zigzag') points = 15;
+
+    this.combo++;
+    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+
+    this.addScore(points, ghost.position);
+    this.ghostsDestroyed++;
+    this.updateLevel();
+
+    // Check for life recovery every 100 ghosts
+    if (this.ghostsDestroyed % 100 === 0) {
+      this.lives++;
+      this.soundManager.playExtraLife();
+      this.visualEffects.push(new ScorePopup(
+        { x: this.width / 2, y: this.height / 2 },
+        'EXTRA LIFE!', '#88FF88', Math.max(18, 34 * this.scale)
+      ));
+    }
+
+    this.maybeDropPowerUp(ghost);
+  }
+
+  /** Splitter ghosts break into two ordinary ghosts that cannot split again. */
+  private spawnSplitterFragments(parent: Ghost) {
+    for (const dir of [-1, 1]) {
+      const fragment = new Ghost(
+        parent.position.x + dir * parent.width * 0.4,
+        parent.position.y,
+        'normal'
+      );
+      fragment.isFragment = true;
+      fragment.width *= this.scale;
+      fragment.height *= this.scale;
+      fragment.baseSpeed *= this.scale * this.ghostSpeedMultiplier;
+      fragment.evasionSpeed *= this.scale * this.ghostSpeedMultiplier;
+      fragment.velocity.y = fragment.baseSpeed;
+      this.ghosts.push(fragment);
+    }
+  }
+
+  private maybeDropPowerUp(ghost: Ghost) {
+    // Big ghosts always reward a power-up; ordinary ghosts drop occasionally
+    const guaranteed = ghost.type === 'boss' || ghost.type === 'rainbow';
+    if (!guaranteed && Math.random() > this.powerUpDropChance) return;
+
+    const types: PowerUpType[] = ['shield', 'rapidFire', 'multiShot'];
+    const powerUp = new PowerUp(
+      ghost.position.x,
+      ghost.position.y,
+      types[Math.floor(Math.random() * types.length)]
+    );
+    powerUp.width *= this.scale;
+    powerUp.height *= this.scale;
+    powerUp.velocity.y *= this.scale;
+    this.powerUps.push(powerUp);
+  }
+
+  private checkPowerUpPlayerCollision(powerUp: PowerUp): boolean {
+    const dx = Math.abs(powerUp.position.x - this.player.position.x);
+    const dy = Math.abs(powerUp.position.y - this.player.position.y);
+    return dx < (powerUp.width + this.player.width) / 2 &&
+           dy < (powerUp.height + this.player.height) / 2;
+  }
+
+  private applyPowerUp(type: PowerUpType, currentTime: number) {
+    let label = '';
+    switch (type) {
+      case 'shield':
+        this.shieldCharges = Math.min(2, this.shieldCharges + 1);
+        label = 'SHIELD';
+        break;
+      case 'rapidFire':
+        this.rapidFireUntil = currentTime + this.powerUpDuration;
+        label = 'RAPID FIRE';
+        break;
+      case 'multiShot':
+        this.multiShotUntil = currentTime + this.powerUpDuration;
+        label = 'MULTI SHOT';
+        break;
+    }
+
+    this.soundManager.playExtraLife();
+    this.visualEffects.push(new ScorePopup(
+      { x: this.player.position.x, y: this.player.position.y - 40 * this.scale },
+      label, '#00E5FF', Math.max(14, 20 * this.scale)
+    ));
+  }
+
+  /** Consumes a shield charge to absorb a hit. Returns true if absorbed. */
+  private absorbWithShield(at: Vector2D): boolean {
+    if (this.shieldCharges <= 0) return false;
+    this.shieldCharges--;
+    this.soundManager.playGhostHit();
+    this.visualEffects.push(new ScorePopup(
+      at, 'BLOCKED!', '#00E5FF', Math.max(14, 20 * this.scale)
+    ));
+    return true;
+  }
+
+  private loseLife() {
+    this.lives--;
+    this.lifeLostTime = performance.now();
+    this.resetCombo();
+    this.soundManager.playLifeLost();
+    if (this.lives <= 0) {
+      this.triggerGameOver();
+    }
+  }
+
+  private triggerGameOver() {
+    const isNewHighScore = this.score > this.highScore;
+    this.saveHighScore();
+
+    this.state = 'gameOver';
+    this.soundManager.playGameOver();
+    this.onStateChange?.('gameOver', {
+      score: this.score,
+      highScore: this.highScore,
+      isNewHighScore,
+      ghostsDestroyed: this.ghostsDestroyed,
+      accuracy: this.shotsFired > 0
+        ? Math.round((this.shotsHit / this.shotsFired) * 100)
+        : 0,
+      bestCombo: this.bestCombo,
+      timeSurvived: this.runStartTime > 0
+        ? (performance.now() - this.runStartTime) / 1000
+        : 0
+    });
+  }
+
+  /** Zigzag and splitter ghosts start appearing as difficulty ramps up. */
+  private pickRegularGhostType(): GhostType {
+    const d = this.difficulty;
+    const roll = Math.random();
+    if (d > 0.5 && roll < 0.15) return 'splitter';
+    if (d > 0.2 && roll < 0.35) return 'zigzag';
+    return 'normal';
   }
 
   private fireNuke() {
@@ -606,12 +932,15 @@ export class Game {
       if (distance <= blastRadius) {
         // Create explosion effect for each destroyed ghost
         this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color));
-        this.score += 50; // Bonus points for nuke kills
+        // Bonus points for nuke kills. The combo multiplier still applies, but
+        // a nuke does not build the combo itself - that rewards aimed shots.
+        this.addScore(50, ghost.position);
         this.ghostsDestroyed++;
-        
+
         // Check for life recovery every 100 ghosts
         if (this.ghostsDestroyed % 100 === 0) {
           this.lives++;
+          this.soundManager.playExtraLife();
         }
         
         return false;
@@ -625,13 +954,21 @@ export class Game {
     if (type === 'special') baseSize = 80;
     if (type === 'rainbow') baseSize = 120;
     if (type === 'boss') baseSize = 160; // 4x regular size
+    if (type === 'splitter') baseSize = 60;
     
     const x = Math.random() * (this.width - baseSize * this.scale) + (baseSize / 2) * this.scale;
     const ghost = new Ghost(x, -baseSize * this.scale, type);
+
+    // Ordinary ghosts wear the level palette; special types keep their identity
+    if (type === 'normal' || type === 'zigzag' || type === 'splitter') {
+      const palette = this.theme.ghostColors;
+      ghost.color = palette[Math.floor(Math.random() * palette.length)];
+    }
     ghost.width *= this.scale;
     ghost.height *= this.scale;
-    ghost.baseSpeed *= this.scale;
-    ghost.evasionSpeed *= this.scale;
+    ghost.baseSpeed *= this.scale * this.ghostSpeedMultiplier;
+    ghost.evasionSpeed *= this.scale * this.ghostSpeedMultiplier;
+    ghost.velocity.y = ghost.baseSpeed;
     this.ghosts.push(ghost);
     
     // Play spawn sound
@@ -639,82 +976,48 @@ export class Game {
   }
 
   private checkCollisions() {
-    // Check projectile-ghost collisions
-    let bossGhostToExplode: Ghost | null = null;
-    let rainbowGhostsToExplode: Ghost[] = [];
-    
+    const bossGhostsToExplode: Ghost[] = [];
+    const rainbowGhostsToExplode: Ghost[] = [];
+    const splittersToSplit: Ghost[] = [];
+
     this.projectiles = this.projectiles.filter(projectile => {
-      let hit = false;
-      this.ghosts = this.ghosts.filter(ghost => {
-        if (this.checkProjectileGhostCollision(projectile, ghost)) {
-          const isDestroyed = ghost.takeDamage();
-          
-          if (isDestroyed) {
-            // Create explosion effect for destroyed ghost
-            this.visualEffects.push(new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color));
-            
-            // Play destroyed sound
-            this.soundManager.playGhostDestroyed(ghost.type);
-            
-            // Points based on ghost type
-            let points = 10;
-            if (ghost.type === 'rainbow') {
-              points = 20; // Rainbow ghost destroyed
-            } else if (ghost.type === 'special') {
-              points = 50; // Original white ghost
-            } else if (ghost.type === 'boss') {
-              points = 100; // Boss ghost base points
-            }
-            
-            this.score += points;
-            this.ghostsDestroyed++;
-            
-            // Check for life recovery every 100 ghosts
-            if (this.ghostsDestroyed % 100 === 0) {
-              this.lives++;
-              this.soundManager.playExtraLife();
-            }
-            
-            // Mark for area damage handling after the filter completes
-            if (ghost.type === 'rainbow') {
-              rainbowGhostsToExplode.push(ghost);
-            } else if (ghost.type === 'boss') {
-              bossGhostToExplode = ghost;
-            }
-          } else {
-            // Ghost survived hit
-            // Create a smaller explosion effect for the hit
-            const smallExplosion = new ExplosionEffect(ghost.position, ghost.color === 'rainbow' ? '#FF00FF' : ghost.color);
-            smallExplosion.duration = 0.3; // Shorter duration
-            this.visualEffects.push(smallExplosion);
-            
-            // Play hit sound
-            this.soundManager.playGhostHit();
-            
-            // Points for hitting but not destroying
-            if (ghost.type === 'rainbow') {
-              this.score += 30; // Rainbow ghost hit
-            } else {
-              this.score += 25; // Special ghost hit
-            }
-          }
-          
-          hit = true;
-          return !isDestroyed; // Keep ghost if not destroyed
+      // A projectile is spent on the first ghost it touches
+      const ghost = this.ghosts.find(g => this.checkProjectileGhostCollision(projectile, g));
+      if (!ghost) return true;
+
+      this.shotsHit++;
+      const isDestroyed = ghost.takeDamage();
+
+      if (isDestroyed) {
+        this.ghosts = this.ghosts.filter(g => g !== ghost);
+        this.registerKill(ghost);
+
+        // Area effects are resolved after the loop so the arrays stay stable
+        if (ghost.type === 'rainbow') {
+          rainbowGhostsToExplode.push(ghost);
+        } else if (ghost.type === 'boss') {
+          bossGhostsToExplode.push(ghost);
+        } else if (ghost.isSplitter && !ghost.isFragment) {
+          splittersToSplit.push(ghost);
         }
-        return true;
-      });
-      return !hit;
+      } else {
+        // Ghost survived the hit - smaller burst and partial credit
+        const smallExplosion = new ExplosionEffect(
+          ghost.position,
+          ghost.color === 'rainbow' ? '#FF00FF' : ghost.color
+        );
+        smallExplosion.duration = 0.3;
+        this.visualEffects.push(smallExplosion);
+        this.soundManager.playGhostHit();
+        this.addScore(ghost.type === 'rainbow' ? 30 : 25, ghost.position);
+      }
+
+      return false; // projectile consumed
     });
-    
-    // Handle area explosions after the main collision loop
-    rainbowGhostsToExplode.forEach(ghost => {
-      this.handleRainbowGhostExplosion(ghost);
-    });
-    
-    if (bossGhostToExplode) {
-      this.handleBossGhostExplosion(bossGhostToExplode);
-    }
+
+    rainbowGhostsToExplode.forEach(ghost => this.handleRainbowGhostExplosion(ghost));
+    bossGhostsToExplode.forEach(ghost => this.handleBossGhostExplosion(ghost));
+    splittersToSplit.forEach(ghost => this.spawnSplitterFragments(ghost));
   }
 
   private checkProjectileGhostCollision(projectile: Projectile, ghost: Ghost): boolean {
@@ -750,89 +1053,188 @@ export class Game {
       this.player.render(this.ctx);
       this.ghosts.forEach(ghost => ghost.render(this.ctx));
       this.projectiles.forEach(projectile => projectile.render(this.ctx));
+      this.powerUps.forEach(powerUp => powerUp.render(this.ctx));
       this.visualEffects.forEach(effect => effect.render(this.ctx));
     }
 
     // Draw UI
     this.drawUI();
+    this.drawLevelBanner();
   }
 
   private initializeStarLayers() {
-    // Create 3 layers of stars for parallax effect
+    // Three depth layers. Speed, size and brightness all increase together so
+    // nearer stars visibly overtake farther ones - that contrast is the whole
+    // parallax effect. Speeds are in units of "screens per second" and get
+    // multiplied by canvas height, so the illusion holds at any size.
     const layers = [
-      { speed: 20, count: 50, sizeRange: [0.5, 1], opacity: 0.4 }, // Far layer
-      { speed: 50, count: 30, sizeRange: [1, 2], opacity: 0.7 },   // Middle layer
-      { speed: 100, count: 20, sizeRange: [2, 3], opacity: 1.0 }   // Near layer
+      { speedFactor: 0.020, count: 60, sizeRange: [0.6, 1.2], opacity: 0.45 }, // far
+      { speedFactor: 0.055, count: 32, sizeRange: [1.2, 2.0], opacity: 0.75 }, // mid
+      { speedFactor: 0.120, count: 18, sizeRange: [2.0, 3.2], opacity: 1.0 }   // near
     ];
-    
+
+    this.starLayers = [];
     layers.forEach((config) => {
       const stars: Star[] = [];
       for (let i = 0; i < config.count; i++) {
         stars.push({
           x: Math.random() * this.width,
           y: Math.random() * this.height,
-          size: config.sizeRange[0] + Math.random() * (config.sizeRange[1] - config.sizeRange[0]),
+          size: (config.sizeRange[0] + Math.random() * (config.sizeRange[1] - config.sizeRange[0])) * this.scale,
           twinkle: Math.random() * Math.PI * 2,
           twinkleSpeed: 0.5 + Math.random() * 2
         });
       }
-      
+
       this.starLayers.push({
         stars,
-        speed: config.speed,
+        speedFactor: config.speedFactor,
+        speed: config.speedFactor * this.height,
         opacity: config.opacity
       });
     });
   }
-  
+
   private updateStarLayers(deltaTime: number) {
     this.starLayers.forEach(layer => {
       layer.stars.forEach(star => {
-        // Move star downward
         star.y += layer.speed * deltaTime;
-        
-        // Update twinkle effect
         star.twinkle += star.twinkleSpeed * deltaTime;
-        
-        // Wrap star to top when it goes off bottom
-        if (star.y > this.height + star.size) {
+
+        // Wrap to the top once fully off the bottom
+        if (star.y - star.size > this.height) {
           star.y = -star.size;
           star.x = Math.random() * this.width;
         }
       });
     });
   }
-  
+
   private drawStars() {
-    // Draw parallax star layers from back to front
-    this.starLayers.forEach(layer => {
+    const tint = this.theme.star;
+    const r = parseInt(tint.slice(1, 3), 16);
+    const g = parseInt(tint.slice(3, 5), 16);
+    const b = parseInt(tint.slice(5, 7), 16);
+
+    this.ctx.save();
+    // Draw back to front. Only the nearest layer pays for a glow: shadowBlur is
+    // the most expensive canvas op here and 100+ blurred stars per frame was
+    // measurably costly on low-end tablets.
+    this.starLayers.forEach((layer, layerIndex) => {
+      const isNearLayer = layerIndex === this.starLayers.length - 1;
+
+      if (isNearLayer) {
+        this.ctx.shadowBlur = 6 * this.scale;
+        this.ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.9)`;
+      } else {
+        this.ctx.shadowBlur = 0;
+      }
+
       layer.stars.forEach(star => {
-        // Calculate twinkle effect
-        const twinkleOpacity = 0.5 + 0.5 * Math.sin(star.twinkle);
-        const finalOpacity = layer.opacity * twinkleOpacity;
-        
-        // Draw star with simple glow effect instead of gradient
-        this.ctx.save();
-        
-        // Outer glow using shadowBlur
-        this.ctx.shadowBlur = star.size * 3;
-        this.ctx.shadowColor = `rgba(150, 150, 255, ${finalOpacity * 0.5})`;
-        this.ctx.fillStyle = `rgba(255, 255, 255, ${finalOpacity})`;
-        
+        const twinkle = 0.55 + 0.45 * Math.sin(star.twinkle);
+        const alpha = layer.opacity * twinkle;
+
+        this.ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
         this.ctx.beginPath();
         this.ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
         this.ctx.fill();
-        
-        // Center bright point
-        this.ctx.shadowBlur = 0;
-        this.ctx.fillStyle = `rgba(255, 255, 255, ${finalOpacity})`;
-        this.ctx.beginPath();
-        this.ctx.arc(star.x, star.y, star.size * 0.3, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        this.ctx.restore();
+
+        // Bright core keeps near stars reading as points, not blobs
+        if (isNearLayer) {
+          this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          this.ctx.beginPath();
+          this.ctx.arc(star.x, star.y, star.size * 0.22, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
       });
     });
+    this.ctx.restore();
+  }
+
+  /** Full-width level-up flash, shown briefly when a new level starts. */
+  private drawLevelBanner() {
+    const remaining = this.levelUpBannerUntil - performance.now();
+    if (remaining <= 0) return;
+
+    const progress = 1 - remaining / this.levelBannerDuration;
+    // Fade in fast, hold, then fade out
+    const alpha = progress < 0.15
+      ? progress / 0.15
+      : progress > 0.7
+        ? Math.max(0, 1 - (progress - 0.7) / 0.3)
+        : 1;
+
+    const bandHeight = Math.round(70 * this.scale);
+    const centreY = this.height * 0.42;
+
+    this.ctx.save();
+    this.ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.55})`;
+    this.ctx.fillRect(0, centreY - bandHeight / 2, this.width, bandHeight);
+
+    this.ctx.strokeStyle = this.hexToRgba(this.theme.accent, alpha * 0.9);
+    this.ctx.lineWidth = Math.max(1, 2 * this.scale);
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, centreY - bandHeight / 2);
+    this.ctx.lineTo(this.width, centreY - bandHeight / 2);
+    this.ctx.moveTo(0, centreY + bandHeight / 2);
+    this.ctx.lineTo(this.width, centreY + bandHeight / 2);
+    this.ctx.stroke();
+
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.shadowBlur = 14;
+    this.ctx.shadowColor = this.theme.accent;
+    this.ctx.fillStyle = this.hexToRgba(this.theme.accent, alpha);
+    this.ctx.font = `bold ${Math.round(34 * this.scale)}px 'Oxanium', sans-serif`;
+    this.ctx.fillText(`LEVEL ${this.level}`, this.width / 2, centreY - bandHeight * 0.16);
+
+    this.ctx.shadowBlur = 0;
+    this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.85})`;
+    this.ctx.font = `${Math.round(16 * this.scale)}px 'Oxanium', sans-serif`;
+    this.ctx.fillText(this.theme.name, this.width / 2, centreY + bandHeight * 0.26);
+    this.ctx.restore();
+  }
+
+  private hexToRgba(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  /** Active power-up indicators, stacked under the left-hand HUD column. */
+  private drawPowerUpStatus(padding: number, fontSize: number) {
+    const now = performance.now();
+    const entries: { label: string; color: string }[] = [];
+
+    if (this.shieldCharges > 0) {
+      entries.push({
+        label: `Shield x${this.shieldCharges}`,
+        color: '#00E5FF'
+      });
+    }
+    if (now < this.rapidFireUntil) {
+      entries.push({
+        label: `Rapid Fire ${Math.ceil((this.rapidFireUntil - now) / 1000)}s`,
+        color: '#FFD700'
+      });
+    }
+    if (now < this.multiShotUntil) {
+      entries.push({
+        label: `Multi Shot ${Math.ceil((this.multiShotUntil - now) / 1000)}s`,
+        color: '#FF4FD8'
+      });
+    }
+    if (entries.length === 0) return;
+
+    this.ctx.save();
+    this.ctx.textAlign = 'left';
+    this.ctx.font = `bold ${fontSize}px 'Oxanium', sans-serif`;
+    entries.forEach((entry, index) => {
+      this.ctx.fillStyle = entry.color;
+      this.ctx.fillText(entry.label, padding, padding * (9.9 + index * 1.1));
+    });
+    this.ctx.restore();
   }
 
   private drawUI() {
@@ -840,9 +1242,43 @@ export class Game {
     const smallFontSize = Math.round(18 * this.scale);
     const padding = Math.round(20 * this.scale);
     
+    this.ctx.textAlign = 'left';
+    this.ctx.fillStyle = 'white';
+    this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
+
+    // Level and progress toward the next one
+    const killsIntoLevel = this.ghostsDestroyed % KILLS_PER_LEVEL;
+    const levelProgress = killsIntoLevel / KILLS_PER_LEVEL;
+    this.ctx.fillStyle = this.theme.accent;
+    this.ctx.font = `bold ${smallFontSize}px 'Oxanium', sans-serif`;
+    this.ctx.fillText(
+      `Level ${this.level} - ${this.theme.name}`,
+      padding,
+      padding * 4.1
+    );
+
+    const barWidth = Math.round(150 * this.scale);
+    const barHeight = Math.max(3, Math.round(5 * this.scale));
+    const barY = padding * 4.1 + barHeight;
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+    this.ctx.fillRect(padding, barY, barWidth, barHeight);
+    this.ctx.fillStyle = this.theme.accent;
+    this.ctx.fillRect(padding, barY, barWidth * levelProgress, barHeight);
+
     this.ctx.fillStyle = 'white';
     this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     this.ctx.fillText(`Score: ${this.score}`, padding, padding * 2);
+
+    // Personal best, highlighted once this run overtakes it
+    const beatingBest = this.score > this.highScore && this.highScore > 0;
+    this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
+    this.ctx.fillStyle = beatingBest ? '#FFD700' : 'rgba(255, 255, 255, 0.65)';
+    this.ctx.fillText(
+      beatingBest ? 'NEW BEST!' : `Best: ${Math.max(this.highScore, this.score)}`,
+      padding,
+      padding * 3.1
+    );
+    this.ctx.font = `${baseFontSize}px 'Oxanium', sans-serif`;
     
     // Lives indicator with blinking effect
     const currentTime = performance.now();
@@ -856,7 +1292,7 @@ export class Game {
       this.ctx.fillStyle = 'white';
     }
     
-    this.ctx.fillText(`Lives: ${this.lives}`, padding, padding * 3.5);
+    this.ctx.fillText(`Lives: ${this.lives}`, padding, padding * 6.1);
     
     // Reset fill style for subsequent drawing
     this.ctx.fillStyle = 'white';
@@ -865,7 +1301,21 @@ export class Game {
     const ghostsToNextLife = 100 - (this.ghostsDestroyed % 100);
     this.ctx.fillStyle = '#88FF88';
     this.ctx.font = `${smallFontSize}px 'Oxanium', sans-serif`;
-    this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, padding, padding * 5);
+    this.ctx.fillText(`Ghosts: ${this.ghostsDestroyed} (${ghostsToNextLife} to +1 life)`, padding, padding * 7.5);
+
+    // Combo meter - only while a streak is actually running
+    if (this.combo > 1) {
+      const multiplier = this.comboMultiplier;
+      this.ctx.fillStyle = multiplier > 1 ? '#FFD700' : '#FFFFFF';
+      this.ctx.font = `bold ${smallFontSize}px 'Oxanium', sans-serif`;
+      this.ctx.fillText(
+        `Combo: ${this.combo}${multiplier > 1 ? `  (x${multiplier})` : ''}`,
+        padding,
+        padding * 8.7
+      );
+    }
+
+    this.drawPowerUpStatus(padding, smallFontSize);
     
     // Reset font for other UI elements
     this.ctx.fillStyle = 'white';
@@ -1041,6 +1491,16 @@ export class Game {
   }
 }
 
+export interface GameOverData {
+  score?: number;
+  highScore?: number;
+  isNewHighScore?: boolean;
+  ghostsDestroyed?: number;
+  accuracy?: number; // percent, 0-100
+  bestCombo?: number;
+  timeSurvived?: number; // seconds
+}
+
 interface Star {
   x: number;
   y: number;
@@ -1051,6 +1511,8 @@ interface Star {
 
 interface StarLayer {
   stars: Star[];
+  /** Screens per second; multiplied by canvas height to get pixels per second. */
+  speedFactor: number;
   speed: number;
   opacity: number;
 }
