@@ -1,3 +1,4 @@
+import { GhostType } from '../Ghost';
 /**
  * Sound Manager for Ghost Invaders
  * Loads and plays all game sound effects
@@ -186,7 +187,7 @@ export class SoundManager {
     this.playSound('shoot', 0.5);
   }
   
-  playGhostSpawn(ghostType: 'normal' | 'special' | 'rainbow' | 'boss', x: number, canvasWidth: number) {
+  playGhostSpawn(ghostType: GhostType, x: number, canvasWidth: number) {
     const pan = this.calculatePan(x, canvasWidth);
     
     switch (ghostType) {
@@ -202,6 +203,9 @@ export class SoundManager {
       case 'boss':
         this.playSound('bossGhostSpawn', 0.7, pan);
         break;
+      default:
+        this.playSound('ghostSpawn', 0.4, pan);
+        break;
     }
   }
   
@@ -209,7 +213,7 @@ export class SoundManager {
     this.playSound('ghostHit', 0.4);
   }
   
-  playGhostDestroyed(ghostType: 'normal' | 'special' | 'rainbow' | 'boss') {
+  playGhostDestroyed(ghostType: GhostType) {
     if (ghostType === 'rainbow') {
       this.playSound('rainbowExplosion', 0.6);
     } else if (ghostType === 'boss') {
